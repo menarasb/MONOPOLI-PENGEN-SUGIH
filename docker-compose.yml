@@ -1,0 +1,16 @@
+# Contoh untuk Dokploy / Docker Compose. Ekspos lewat Cloudflare Tunnel ke port 3000 (WebSocket didukung).
+services:
+  monopoli:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATA_DIR=/data
+      # Matikan paket tokoh politik tanpa rilis ulang: CHARACTER_PACKS=generik
+      - CHARACTER_PACKS=tokoh,generik
+    volumes:
+      - monopoli-data:/data
+volumes:
+  monopoli-data:

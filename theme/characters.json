@@ -1,0 +1,21 @@
+{
+  "note": "Karakter bawaan. Semua tokoh memakai template, ukuran, dan jumlah animasi yang sama, tanpa kemampuan khusus dan tanpa warna/simbol partai. Tambah tokoh cukup dengan menambah entri di sini.",
+  "disclaimer": "Parodi. Tidak berafiliasi dengan tokoh mana pun.",
+  "packs": [
+    { "id": "tokoh", "name": "Tokoh (karikatur parodi)" },
+    { "id": "generik", "name": "Warga" }
+  ],
+  "characters": [
+    { "id": "jokowi",   "name": "Joko Widodo",            "pack": "tokoh",   "parts": { "face": "oval",  "skin": 2, "hair": "belah",  "hairColor": 0, "headwear": "none",     "glasses": false, "mustache": false, "shirt": 0 } },
+    { "id": "gibran",   "name": "Gibran Rakabuming Raka", "pack": "tokoh",   "parts": { "face": "bulat", "skin": 1, "hair": "pendek", "hairColor": 0, "headwear": "none",     "glasses": false, "mustache": false, "shirt": 3 } },
+    { "id": "prabowo",  "name": "Prabowo Subianto",       "pack": "tokoh",   "parts": { "face": "bulat", "skin": 1, "hair": "pendek", "hairColor": 0, "headwear": "peci",     "glasses": false, "mustache": false, "shirt": 1 } },
+    { "id": "megawati", "name": "Megawati Soekarnoputri", "pack": "tokoh",   "parts": { "face": "bulat", "skin": 1, "hair": "bob",    "hairColor": 0, "headwear": "none",     "glasses": false, "mustache": false, "shirt": 4 } },
+    { "id": "anies",    "name": "Anies Baswedan",         "pack": "tokoh",   "parts": { "face": "oval",  "skin": 1, "hair": "klimis", "hairColor": 0, "headwear": "none",     "glasses": false, "mustache": false, "shirt": 0 } },
+    { "id": "ganjar",   "name": "Ganjar Pranowo",         "pack": "tokoh",   "parts": { "face": "kotak", "skin": 1, "hair": "ikal",   "hairColor": 3, "headwear": "none",     "glasses": false, "mustache": false, "shirt": 0 } },
+    { "id": "bahlil",   "name": "Bahlil Lahadalia",       "pack": "tokoh",   "parts": { "face": "bulat", "skin": 3, "hair": "pendek", "hairColor": 0, "headwear": "none",     "glasses": false, "mustache": true,  "shirt": 2 } },
+    { "id": "pakrt",    "name": "Pak RT",                 "pack": "generik", "parts": { "face": "kotak", "skin": 2, "hair": "pendek", "hairColor": 0, "headwear": "peci",     "glasses": false, "mustache": true,  "shirt": 2 } },
+    { "id": "bulurah",  "name": "Bu Lurah",               "pack": "generik", "parts": { "face": "oval",  "skin": 1, "hair": "panjang","hairColor": 0, "headwear": "kerudung", "glasses": false, "mustache": false, "shirt": 4 } },
+    { "id": "juragan",  "name": "Juragan",                "pack": "generik", "parts": { "face": "bulat", "skin": 0, "hair": "botak",  "hairColor": 2, "headwear": "none",     "glasses": true,  "mustache": true,  "shirt": 1 } },
+    { "id": "mahasiswa","name": "Mahasiswa",              "pack": "generik", "parts": { "face": "oval",  "skin": 2, "hair": "ikal",   "hairColor": 0, "headwear": "none",     "glasses": true,  "mustache": false, "shirt": 5 } }
+  ]
+}
