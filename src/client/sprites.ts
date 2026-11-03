@@ -334,30 +334,154 @@ export function icon(name: string): HTMLCanvasElement {
   return c;
 }
 
-// ---------------------------------------------------------------- rumah adat 8x8 (4 varian) & hotel 8x12
+// ---------------------------------------------------------------- bangunan 3D isometrik (rumah & hotel)
+// Digambar per-pixel dari bentuk 3D (proyeksi isometrik 2:1) supaya tetap bergaya pixel art
+// tapi punya sisi terang/gelap, atap pelana, jendela, dan garis tepi.
 
-const HOUSE = ['...kk...', '..kRRk..', '.kRRRRk.', 'kRRRRRRk', '.wwwwww.', '.wkwwnw.', '.wkwwnw.', '.NNNNNN.'];
-const HOUSE_ROOFS = ['#b0412e', '#3f8f4a', '#8b5a2b', '#2e6fb5'];
-const HOTEL = ['.kkkkkk.', '.rrrrrr.', '.wbwwbw.', '.wwwwww.', '.wbwwbw.', '.wwwwww.', '.wbwwbw.', '.wwwwww.', '.wbwwbw.', '.wwwwww.', '.wwkkww.', '.SSSSSS.'];
+type P3 = [number, number, number];
+type Face = { pts: P3[]; col: string };
 
-const bCache = new Map<string, HTMLCanvasElement>();
-export function building(kind: 'house' | 'hotel', variant = 0): HTMLCanvasElement {
+export interface BuildingSprite {
+  c: HTMLCanvasElement;
+  /** titik jangkar (tengah alas paling bawah) dalam pixel kanvas */
+  ax: number;
+  ay: number;
+}
+
+const HOUSE_ROOFS = ['#c0392b', '#3f8f4a', '#a0522d', '#2e6fb5'];
+const bCache = new Map<string, BuildingSprite>();
+
+function inPoly(x: number, y: number, poly: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Rasterisasi daftar sisi (urut belakang -> depan) menjadi sprite ber-outline. */
+function rasterIso(a: number, b: number, top: number, faces: Face[]): BuildingSprite {
+  const pad = 2;
+  const W = a + b + pad * 2 + 4;
+  const H = Math.ceil((a + b) / 2 + top) + pad * 2 + 2;
+  const ox = b + pad + 2;
+  const oy = top + pad;
+  const proj = ([x, y, z]: P3): [number, number] => [ox + x - y, oy + (x + y) / 2 - z];
+  const buf: (string | null)[] = new Array(W * H).fill(null);
+  for (const f of faces) {
+    const poly = f.pts.map(proj);
+    const xs = poly.map((q) => q[0]);
+    const ys = poly.map((q) => q[1]);
+    for (let y = Math.max(0, Math.floor(Math.min(...ys))); y <= Math.min(H - 1, Math.ceil(Math.max(...ys))); y++)
+      for (let x = Math.max(0, Math.floor(Math.min(...xs))); x <= Math.min(W - 1, Math.ceil(Math.max(...xs))); x++)
+        if (inPoly(x + 0.5, y + 0.5, poly)) buf[y * W + x] = f.col;
+  }
+  // garis tepi luar
+  const out = buf.slice();
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      if (buf[y * W + x]) continue;
+      const n = (dx: number, dy: number) => {
+        const X = x + dx;
+        const Y = y + dy;
+        return X >= 0 && Y >= 0 && X < W && Y < H && !!buf[Y * W + X];
+      };
+      if (n(1, 0) || n(-1, 0) || n(0, 1) || n(0, -1)) out[y * W + x] = OUT;
+    }
+  const [c, ctx] = canvas(W, H);
+  out.forEach((col, k) => {
+    if (!col) return;
+    ctx.fillStyle = col;
+    ctx.fillRect(k % W, Math.floor(k / W), 1, 1);
+  });
+  const [bx, by] = proj([a, b, 0]);
+  const [lx] = proj([0, b, 0]);
+  const [rx] = proj([a, 0, 0]);
+  return { c, ax: (lx + rx) / 2, ay: by + 1 };
+}
+
+/** persegi di bidang y = Y (sisi kiri-depan) */
+const onY = (Y: number, x0: number, x1: number, z0: number, z1: number, col: string): Face => ({
+  pts: [[x0, Y, z0], [x1, Y, z0], [x1, Y, z1], [x0, Y, z1]],
+  col,
+});
+/** persegi di bidang x = X (sisi kanan-depan) */
+const onX = (X: number, y0: number, y1: number, z0: number, z1: number, col: string): Face => ({
+  pts: [[X, y0, z0], [X, y1, z0], [X, y1, z1], [X, y0, z1]],
+  col,
+});
+
+export function building(kind: 'house' | 'hotel', variant = 0): BuildingSprite {
   const key = kind + variant;
   const hit = bCache.get(key);
   if (hit) return hit;
-  const rows = kind === 'house' ? HOUSE : HOTEL;
-  const [c, ctx] = canvas(8, rows.length);
-  rows.forEach((row, y) => {
-    for (let x = 0; x < 8; x++) {
-      const ch = row[x];
-      const col = ch === 'R' ? HOUSE_ROOFS[variant % 4] : PAL[ch];
-      if (!col) continue;
-      ctx.fillStyle = col;
-      ctx.fillRect(x, y, 1, 1);
+  let spr: BuildingSprite;
+  if (kind === 'house') {
+    const a = 12, b = 10, h = 10, r = 9;
+    const roof = HOUSE_ROOFS[variant % 4];
+    const wallL = '#f6e7c8';
+    const wallR = '#cdb48a';
+    const m = b / 2;
+    spr = rasterIso(a, b, h + r + 2, [
+      // atap belakang (hanya ujungnya yang terlihat)
+      { pts: [[-1, -1, h - 1], [a + 1, -1, h - 1], [a + 1, m, h + r], [-1, m, h + r]], col: shiftColor(roof, -55) },
+      onY(b, 0, a, 0, h, wallL),
+      onX(a, 0, b, 0, h, wallR),
+      { pts: [[a, 0, h], [a, b, h], [a, m, h + r]], col: wallR },
+      // fondasi
+      onY(b, 0, a, 0, 1.5, '#9a8466'),
+      onX(a, 0, b, 0, 1.5, '#7a6650'),
+      // pintu & jendela
+      onY(b, 7, 10, 1.5, 7, '#6b3b1f'),
+      onY(b, 1.5, 5, 4, 7, '#7fc6e8'),
+      onX(a, 2.5, 7.5, 4, 7, '#5aa0c4'),
+      { pts: [[a, m - 1, h + 2], [a, m + 1, h + 2], [a, m + 1, h + 4], [a, m - 1, h + 4]], col: '#5aa0c4' },
+      // cerobong
+      onY(3, 2, 4, h + r - 4, h + r + 1, '#b0563c'),
+      onX(4, 1, 3, h + r - 4, h + r + 1, '#7f3a28'),
+      // atap depan + lis
+      { pts: [[-1, m, h + r], [a + 1, m, h + r], [a + 1, b + 1, h - 1], [-1, b + 1, h - 1]], col: roof },
+      { pts: [[-1, m, h + r], [a + 1, m, h + r], [a + 1, m + 1, h + r - 1.6], [-1, m + 1, h + r - 1.6]], col: shiftColor(roof, 45) },
+      { pts: [[-1, b, h - 0.2], [a + 1, b, h - 0.2], [a + 1, b + 1, h - 1], [-1, b + 1, h - 1]], col: shiftColor(roof, -35) },
+    ]);
+  } else {
+    const a = 16, b = 16, h = 26;
+    const wallL = '#d64532';
+    const wallR = '#94291c';
+    const faces: Face[] = [onY(b, 0, a, 0, h, wallL), onX(a, 0, b, 0, h, wallR)];
+    // lantai-lantai jendela (sebagian menyala)
+    for (let f = 0; f < 4; f++) {
+      const z = 7.5 + f * 4.6;
+      for (let k = 0; k < 3; k++) {
+        const lit = (f * 3 + k + variant) % 4 !== 1;
+        faces.push(onY(b, 2 + k * 4.8, 4.2 + k * 4.8, z, z + 2.8, lit ? '#ffe9a0' : '#3d5a73'));
+        faces.push(onX(a, 2 + k * 4.8, 4.2 + k * 4.8, z, z + 2.8, lit ? '#d9b65e' : '#2a3f52'));
+      }
     }
-  });
-  bCache.set(key, c);
-  return c;
+    faces.push(
+      // lobi kaca + kanopi emas
+      onY(b, 4.5, 10.5, 0, 4.5, '#7fc6e8'),
+      onY(b, 7.2, 7.8, 0, 4.5, '#2a3f52'),
+      { pts: [[3.5, b, 5.5], [11.5, b, 5.5], [11.5, b + 2.5, 4.5], [3.5, b + 2.5, 4.5]], col: '#f4d03f' },
+      onY(b + 2.5, 3.5, 11.5, 3.8, 4.5, '#b7950b'),
+      onX(a, 0, b, 0, 1.2, '#6e1f15'),
+      onY(b, 0, a, 0, 1.2, '#8f2a1d'),
+      // atap datar + tembok pembatas
+      { pts: [[0, 0, h], [a, 0, h], [a, b, h], [0, b, h]], col: '#e8b4a8' },
+      { pts: [[1.5, 1.5, h], [a - 1.5, 1.5, h], [a - 1.5, b - 1.5, h], [1.5, b - 1.5, h]], col: '#a7685d' },
+      // papan nama "H"
+      onX(a / 2 + 1, 4, 11, h, h + 8.5, '#b7950b'),
+      onY(a / 2, a / 2 - 3.5, a / 2 + 3.5, h, h + 8.5, '#f4d03f'),
+      onY(a / 2, a / 2 - 2, a / 2 - 0.8, h + 1.5, h + 7, '#8b1e1e'),
+      onY(a / 2, a / 2 + 0.8, a / 2 + 2, h + 1.5, h + 7, '#8b1e1e'),
+      onY(a / 2, a / 2 - 1, a / 2 + 1, h + 3.7, h + 4.8, '#8b1e1e'),
+    );
+    spr = rasterIso(a, b, h + 10, faces);
+  }
+  bCache.set(key, spr);
+  return spr;
 }
 
 // ---------------------------------------------------------------- dadu 16x16
