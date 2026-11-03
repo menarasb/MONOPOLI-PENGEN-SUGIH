@@ -482,7 +482,7 @@ export class Engine {
     this.log(s, `— Giliran ${p.name}${p.inJail ? ' (di penjara)' : ''}.`);
   }
 
-  endGame(s: GameState, reason: 'last' | 'time') {
+  endGame(s: GameState, reason: 'last' | 'time' | 'left') {
     const alive = this.alive(s);
     const byWorth = [...alive].sort((a, b) => this.netWorth(s, b.id) - this.netWorth(s, a.id));
     const dead = s.players.filter((p) => p.bankrupt).sort((a, b) => (b.bankruptAt ?? 0) - (a.bankruptAt ?? 0));
@@ -499,7 +499,9 @@ export class Engine {
       s,
       reason === 'time'
         ? `Waktu habis! ${w.name} menang dengan total aset ${fmt(this.netWorth(s, w.id))}.`
-        : `${w.name} menang! Semua lawan bangkrut.`,
+        : reason === 'left'
+          ? `${w.name} menang! Tinggal dia sendiri yang tersisa.`
+          : `${w.name} menang! Semua lawan bangkrut.`,
     );
   }
 
@@ -725,7 +727,7 @@ export class Engine {
     this.log(s, `${p.name} melunasi utangnya.`);
   }
 
-  private goBankrupt(s: GameState, p: PlayerState, ctx: Ctx, ev: GameEvent[]) {
+  private goBankrupt(s: GameState, p: PlayerState, ctx: Ctx, ev: GameEvent[], left = false) {
     const myDebts = s.debts.filter((d) => d.debtor === p.id);
     const creditors = [...new Set(myDebts.map((d) => d.creditor))];
     const toPlayer = creditors.length === 1 && creditors[0] !== 'bank' && creditors[0] !== 'pot' ? creditors[0] : null;
@@ -772,7 +774,7 @@ export class Engine {
       s.rollAgain = false;
       s.pendingBuy = null;
     }
-    if (this.alive(s).length <= 1) this.endGame(s, 'last');
+    if (this.alive(s).length <= 1) this.endGame(s, left ? 'left' : 'last');
   }
 
   // ---------------------------------------------------------------- lelang
@@ -1028,7 +1030,7 @@ export class Engine {
     if (p.bankrupt || s.stage === 'gameover') return ev;
     s.debts = s.debts.map((d) => (d.debtor === p.id ? { ...d, creditor: 'bank' } : d));
     this.log(s, `${p.name} meninggalkan permainan.`);
-    this.goBankrupt(s, p, ctx, ev);
+    this.goBankrupt(s, p, ctx, ev, true);
     const stage = s.stage as GameState['stage'];
     if (stage === 'gameover' || (stage === 'auction' && s.auction)) return ev;
     this.settle(s, ctx, ev);

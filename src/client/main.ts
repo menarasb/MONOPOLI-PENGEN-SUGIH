@@ -205,7 +205,7 @@ function render(events: GameEvent[] = [], prev: PublicRoom | null = null) {
   if (screen === 'game') updateGame(events, prev);
 }
 
-function headerBar(extra = '') {
+function headerBar(extra = '', leave = false) {
   return `<header class="bar">
     <div class="logo">MONOPOLI<small>Pengen Sugih</small></div>
     <div class="bar-mid">${extra}</div>
@@ -213,6 +213,7 @@ function headerBar(extra = '') {
       <button class="icon-btn" id="btn-music" title="${T.music}">${audio.musicOn ? '♫' : '<s>♫</s>'}</button>
       <button class="icon-btn" id="btn-sfx" title="${T.sfx}">${audio.sfxOn ? '🔊' : '🔇'}</button>
       <button class="icon-btn" id="btn-rules" title="${T.rules}">?</button>
+      ${leave ? `<button class="icon-btn leave-btn" id="btn-leave" title="${T.leaveGame}">🚪</button>` : ''}
     </div>
   </header>`;
 }
@@ -229,6 +230,20 @@ function bindHeader() {
     $('#btn-sfx').textContent = audio.sfxOn ? '🔊' : '🔇';
   };
   $('#btn-rules').onclick = showRules;
+  const leave = document.getElementById('btn-leave');
+  if (leave) leave.onclick = confirmLeaveGame;
+}
+
+function confirmLeaveGame() {
+  const g = app.room?.game;
+  const me = g?.players.find((p) => p.id === app.session?.playerId);
+  const stillIn = g && me && !me.bankrupt && g.stage !== 'gameover';
+  const msg = stillIn
+    ? 'Yakin keluar dari permainan? Kamu dianggap bangkrut dan semua asetmu kembali ke bank.'
+    : 'Keluar dari room ini?';
+  if (!confirm(msg)) return;
+  socket.emit('room:leave');
+  leaveLocal();
 }
 
 function showRules() {
@@ -569,7 +584,7 @@ function pname(id: string | null) {
 }
 
 function mountGame() {
-  root.innerHTML = `${headerBar('<span class="turn-timer" id="timer"></span>')}
+  root.innerHTML = `${headerBar('<span class="turn-timer" id="timer"></span>', true)}
   <main class="game">
     <div id="board-wrap"></div>
     <aside class="side">

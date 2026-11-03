@@ -562,4 +562,15 @@ describe('keluar permainan', () => {
     expect(g.s.stage).toBe('roll');
     expect(g.s.players[g.s.turnIndex].id).not.toBe('A');
   });
+
+  it('bila tinggal 1 pemain tersisa setelah lawan keluar, dia otomatis menang', () => {
+    const g = setup(3);
+    engine.forfeit(g.s, 'B', g.ctx());
+    expect(g.s.stage).not.toBe('gameover');
+    engine.forfeit(g.s, 'A', g.ctx());
+    expect(g.s.stage).toBe('gameover');
+    expect(g.s.winner).toBe('C');
+    expect(g.s.ranking[0]).toBe('C');
+    expect(g.s.log.some((l) => l.text.includes('Tinggal dia sendiri'))).toBe(true);
+  });
 });
