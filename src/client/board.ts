@@ -3,7 +3,7 @@ import type { PublicGameState } from '../shared/engine';
 import type { GameEvent, Theme } from '../shared/types';
 import { audio } from './audio';
 import { formatMoney } from '../shared/format';
-import { building, drawDie, head, icon, PAL, shiftColor, type BuildingSprite } from './sprites';
+import { building, crispen, drawDie, drawVoxels, head, icon, landmarkModel, landmarkSprite, PAL, shiftColor, type BuildingSprite } from './sprites';
 
 const L = 480;
 const C = 51; // sudut
@@ -135,6 +135,7 @@ const easeOutBack = (k: number) => {
   return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2);
 };
 const clamp01 = (k: number) => Math.max(0, Math.min(1, k));
+const easeOutCubic = (k: number) => 1 - Math.pow(1 - k, 3);
 
 interface TokenAnim {
   from: [number, number];
@@ -158,6 +159,9 @@ export class BoardView {
   private dice: { vals: [number, number]; rolling: number } | null = null;
   private shownHouses = new Map<number, number>();
   private bAnims = new Map<number, { from: number; to: number; t0: number; dur: number }>();
+  /** Animasi besar "Landmark berdiri" di tengah papan. */
+  private landmarkShow: { tile: number; t0: number } | null = null;
+  private showCanvas: HTMLCanvasElement | null = null;
   private particles: Particle[] = [];
   private floats: MoneyFloat[] = [];
   colors = new Map<string, string>();
@@ -536,6 +540,7 @@ export class BoardView {
       }
     }
     this.drawFloats(ctx, now);
+    this.drawLandmarkShow(ctx, now);
   }
 
   // ---------------------------------------------------------------- bangunan 3D + animasi
@@ -587,10 +592,18 @@ export class BoardView {
       }
   }
 
+  /** Sprite bangunan untuk level kota: 1 Rumah, 2 Hotel, 3 Mall, 4 Landmark. */
+  private levelSprite(i: number, lvl: number): BuildingSprite {
+    if (lvl >= 4) return landmarkSprite(this.theme.tiles[i].icon ?? 'tugu');
+    if (lvl === 3) return building('mall', i % 4);
+    if (lvl === 2) return building('hotel', i % 4);
+    return building('house', i % 4);
+  }
+
   private drawBuildings(ctx: CanvasRenderingContext2D, now: number) {
     const s = this.state!;
     const items: { y: number; draw: () => void }[] = [];
-    const put = (spr: BuildingSprite, x: number, y: number, k: number) => {
+    const put = (spr: BuildingSprite, x: number, y: number, k: number, glow = false) => {
       // k: 0..1 progres muncul (1 = berdiri penuh). Efek "tumbuh" + pegas (squash & stretch).
       if (k <= 0) return;
       const e = k >= 1 ? 1 : easeOutBack(k);
@@ -601,6 +614,14 @@ export class BoardView {
         draw: () => {
           const w = spr.c.width * sx;
           const h = spr.c.height * sy;
+          if (glow) {
+            // landmark: lingkaran cahaya emas berdenyut di kakinya
+            const pulse = 0.25 + 0.15 * Math.sin(now / 350);
+            ctx.fillStyle = `rgba(244,208,63,${pulse.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.ellipse(x * S, y * S - 2, (spr.c.width / 2) * sx + 4, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
           // bayangan
           ctx.fillStyle = 'rgba(0,0,0,0.28)';
           ctx.fillRect(x * S - (spr.c.width / 2) * sx + 2, y * S - 3, w - 2, 4);
@@ -611,16 +632,18 @@ export class BoardView {
     for (let i = 0; i < 40; i++) {
       const t = this.theme.tiles[i];
       if (!t.group) continue;
-      const target = s.props[i]?.houses ?? 0;
+      const target = Math.min(4, s.props[i]?.houses ?? 0);
       const shown = this.shownHouses.get(i);
+      const [x, y] = this.buildingAnchor(i, -1);
       if (shown === undefined) this.shownHouses.set(i, target);
       else if (shown !== target) {
-        const hotelSwap = (shown === 5) !== (target === 5);
-        this.bAnims.set(i, { from: shown, to: target, t0: now, dur: hotelSwap ? 1300 : 900 + Math.abs(target - shown) * 120 });
+        const up = target > shown;
+        this.bAnims.set(i, { from: shown, to: target, t0: now, dur: target === 4 && up ? 1700 : 1100 });
         this.shownHouses.set(i, target);
-        if (target === 5 || shown === 5) {
-          const [hx, hy] = this.buildingAnchor(i, -1);
-          this.spawnDust(hx, hy, 14, now, target === 5);
+        this.spawnDust(x, y, up ? 12 : 9, now, up && target >= 2);
+        if (up && target === 4) {
+          this.landmarkShow = { tile: i, t0: now };
+          this.spawnDust(x, y, 16, now + 500, true);
         }
       }
       const an = this.bAnims.get(i);
@@ -628,53 +651,92 @@ export class BoardView {
       if (an && k >= 1) this.bAnims.delete(i);
       const from = an && k < 1 ? an.from : target;
       if (!an || k >= 1) k = 1;
-      const hotelSwap = (from === 5) !== (target === 5);
-      // fase: bila berganti rumah<->hotel, yang lama runtuh dulu (35%) lalu yang baru berdiri
-      const outK = hotelSwap ? clamp01(k / 0.35) : k;
-      const inK = hotelSwap ? clamp01((k - 0.35) / 0.65) : k;
-      const drawSet = (n: number, prog: (j: number) => number) => {
-        if (n === 5) {
-          const [x, y] = this.buildingAnchor(i, -1);
-          put(building('hotel', i % 4), x, y, prog(0));
-        } else
-          for (let j = 0; j < n; j++) {
-            const [x, y] = this.buildingAnchor(i, j);
-            put(building('house', (i + j) % 4), x, y, prog(j));
-          }
-      };
-      if (hotelSwap) {
-        if (outK < 1) drawSet(from, () => 1 - outK);
-        drawSet(target, () => inK);
-      } else if (target >= from) {
-        const extra = target - from;
-        drawSet(target, (j) => {
-          if (j < from) return 1;
-          // muncul bergantian, rumah baru satu per satu
-          const st = extra > 1 ? ((j - from) / extra) * 0.45 : 0;
-          const kk = clamp01((inK - st) / (1 - (extra > 1 ? 0.45 : 0)));
-          if (kk > 0 && kk < 0.05 && !this.dusted.has(`${i}:${j}:${an?.t0}`)) {
-            this.dusted.add(`${i}:${j}:${an?.t0}`);
-            const [x, y] = this.buildingAnchor(i, j);
-            this.spawnDust(x, y, 7, now);
-          }
-          return kk;
-        });
-      } else {
-        drawSet(from, (j) => {
-          if (j < target) return 1;
-          const kk = 1 - clamp01(outK * 1.4);
-          if (kk < 0.9 && !this.dusted.has(`${i}:${j}:${an?.t0}`)) {
-            this.dusted.add(`${i}:${j}:${an?.t0}`);
-            const [x, y] = this.buildingAnchor(i, j);
-            this.spawnDust(x, y, 6, now);
-          }
-          return kk;
-        });
-      }
+      // bangunan lama runtuh dulu (35%), lalu bangunan level baru berdiri
+      const swap = from !== target;
+      const outK = swap ? clamp01(k / 0.35) : 1;
+      const inK = swap ? clamp01((k - 0.35) / 0.65) : 1;
+      if (swap && from > 0 && outK < 1) put(this.levelSprite(i, from), x, y, 1 - outK);
+      if (target > 0) put(this.levelSprite(i, target), x, y, inK, target === 4);
     }
-    if (this.dusted.size > 200) this.dusted.clear();
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.draw();
+  }
+
+  /** Model 3D landmark berputar di tengah papan saat landmark baru berdiri. */
+  private drawLandmarkShow(ctx: CanvasRenderingContext2D, now: number) {
+    const ls = this.landmarkShow;
+    if (!ls) return;
+    const DUR = 3600;
+    const k = (now - ls.t0) / DUR;
+    if (k >= 1) {
+      this.landmarkShow = null;
+      return;
+    }
+    if (k < 0) return;
+    const t = this.theme.tiles[ls.tile];
+    const cx = (L / 2) * S;
+    const cy = (L / 2) * S;
+    const alpha = k < 0.08 ? k / 0.08 : k > 0.86 ? 1 - (k - 0.86) / 0.14 : 1;
+    const pop = k < 0.3 ? easeOutBack(clamp01(k / 0.3)) : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // latar gelap + sinar emas berputar
+    ctx.fillStyle = 'rgba(20,12,8,0.62)';
+    ctx.fillRect(C * S, C * S, (L - 2 * C) * S, (L - 2 * C) * S);
+    ctx.translate(cx, cy);
+    ctx.rotate(now / 2400);
+    for (let r = 0; r < 12; r++) {
+      ctx.rotate(Math.PI / 6);
+      ctx.fillStyle = r % 2 ? 'rgba(244,208,63,0.22)' : 'rgba(255,248,231,0.12)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-30, -300);
+      ctx.lineTo(30, -300);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    // model voxel berputar: 1,5 putaran lalu berhenti di sudut isometrik
+    const spin = Math.PI / 4 + (1 - easeOutCubic(clamp01(k / 0.75))) * Math.PI * 3;
+    const W = 150, H = 150;
+    if (!this.showCanvas) {
+      this.showCanvas = document.createElement('canvas');
+      this.showCanvas.width = W;
+      this.showCanvas.height = H;
+    }
+    const oc = this.showCanvas;
+    const octx = oc.getContext('2d')!;
+    octx.clearRect(0, 0, W, H);
+    drawVoxels(octx, landmarkModel(t.icon ?? 'tugu'), W / 2, H - 34, 5, spin);
+    crispen(oc);
+    const scale = 2.2 * pop;
+    const bob = Math.sin(now / 260) * 4;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(oc, cx - (W / 2) * scale, cy - H * 0.62 * scale + bob, W * scale, H * scale);
+    // teks
+    ctx.font = `28px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const title = 'LANDMARK!';
+    const ty = cy - 190;
+    ctx.fillStyle = PAL.k;
+    for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [3, 3]]) ctx.fillText(title, cx + dx, ty + dy);
+    ctx.fillStyle = Math.floor(now / 180) % 2 ? '#f4d03f' : '#fff8e7';
+    ctx.fillText(title, cx, ty);
+    ctx.font = `16px ${FONT}`;
+    const sub = `${t.landmark ?? t.name} · ${t.name}`;
+    const owner = this.state?.props[ls.tile]?.owner;
+    const by = cy + 200;
+    ctx.fillStyle = PAL.k;
+    for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) ctx.fillText(sub, cx + dx, by + dy);
+    ctx.fillStyle = '#fff8e7';
+    ctx.fillText(sub, cx, by);
+    ctx.font = `12px ${FONT}`;
+    ctx.fillStyle = owner ? this.colors.get(owner) ?? '#fff8e7' : '#fff8e7';
+    ctx.fillText('Tidak bisa diambil alih!', cx, by + 30);
+    ctx.restore();
   }
 
   private dusted = new Set<string>();

@@ -26,10 +26,6 @@
   10
  ],
  "utilityScale": 10,
- "bank": {
-  "houses": 32,
-  "hotels": 12
- },
  "auction": {
   "minBid": 10,
   "timeoutSec": 15
@@ -37,6 +33,12 @@
  "mortgageRate": 0.5,
  "mortgageInterest": 0.1,
  "buildingSellRate": 0.5,
+ "buildCostMult": [
+  1,
+  2,
+  3,
+  4
+ ],
  "groups": [
   {
    "id": "cokelat",
@@ -107,9 +109,8 @@
     20,
     100,
     300,
-    900,
     1600,
-    2500
+    3750
    ],
    "houseCost": 500,
    "icon": "pantai",
@@ -119,7 +120,8 @@
    ],
    "label": [
     "Kupang"
-   ]
+   ],
+   "landmark": "Pantai Lasiana"
   },
   {
    "index": 2,
@@ -141,9 +143,8 @@
     40,
     200,
     600,
-    1800,
     3200,
-    4500
+    6750
    ],
    "houseCost": 500,
    "icon": "masjid",
@@ -153,7 +154,8 @@
    ],
    "label": [
     "Mataram"
-   ]
+   ],
+   "landmark": "Islamic Center NTB"
   },
   {
    "index": 4,
@@ -187,9 +189,8 @@
     60,
     300,
     900,
-    2700,
     4000,
-    5500
+    8250
    ],
    "houseCost": 500,
    "icon": "honai",
@@ -199,7 +200,8 @@
    ],
    "label": [
     "Jayapura"
-   ]
+   ],
+   "landmark": "Rumah Honai"
   },
   {
    "index": 7,
@@ -221,9 +223,8 @@
     60,
     300,
     900,
-    2700,
     4000,
-    5500
+    8250
    ],
    "houseCost": 500,
    "icon": "jembatan",
@@ -233,7 +234,8 @@
    ],
    "label": [
     "Kendari"
-   ]
+   ],
+   "landmark": "Jembatan Teluk Kendari"
   },
   {
    "index": 9,
@@ -245,9 +247,8 @@
     80,
     400,
     1000,
-    3000,
     4500,
-    6000
+    9000
    ],
    "houseCost": 500,
    "icon": "jembatan",
@@ -257,7 +258,8 @@
    ],
    "label": [
     "Palu"
-   ]
+   ],
+   "landmark": "Jembatan Kuning"
   },
   {
    "index": 10,
@@ -278,9 +280,8 @@
     100,
     500,
     1500,
-    4500,
     6250,
-    7500
+    11250
    ],
    "houseCost": 1000,
    "icon": "tugu",
@@ -291,7 +292,8 @@
    "label": [
     "Ponti-",
     "anak"
-   ]
+   ],
+   "landmark": "Tugu Khatulistiwa"
   },
   {
    "index": 12,
@@ -313,9 +315,8 @@
     100,
     500,
     1500,
-    4500,
     6250,
-    7500
+    11250
    ],
    "houseCost": 1000,
    "icon": "perahu",
@@ -326,7 +327,8 @@
    "label": [
     "Banjar-",
     "masin"
-   ]
+   ],
+   "landmark": "Pasar Terapung"
   },
   {
    "index": 14,
@@ -338,9 +340,8 @@
     120,
     600,
     1800,
-    5000,
     7000,
-    9000
+    13500
    ],
    "houseCost": 1000,
    "icon": "masjid",
@@ -351,7 +352,8 @@
    "label": [
     "Sama-",
     "rinda"
-   ]
+   ],
+   "landmark": "Islamic Center Samarinda"
   },
   {
    "index": 15,
@@ -374,9 +376,8 @@
     140,
     700,
     2000,
-    5500,
     7500,
-    9500
+    14250
    ],
    "houseCost": 1000,
    "icon": "jamgadang",
@@ -386,7 +387,8 @@
    ],
    "label": [
     "Padang"
-   ]
+   ],
+   "landmark": "Jam Gadang"
   },
   {
    "index": 17,
@@ -408,9 +410,8 @@
     140,
     700,
     2000,
-    5500,
     7500,
-    9500
+    14250
    ],
    "houseCost": 1000,
    "icon": "rumahadat",
@@ -421,7 +422,8 @@
    "label": [
     "Pekan-",
     "baru"
-   ]
+   ],
+   "landmark": "Balai Adat Melayu"
   },
   {
    "index": 19,
@@ -433,9 +435,8 @@
     160,
     800,
     2200,
-    6000,
     8000,
-    10000
+    15000
    ],
    "houseCost": 1000,
    "icon": "ampera",
@@ -446,7 +447,8 @@
    "label": [
     "Palem-",
     "bang"
-   ]
+   ],
+   "landmark": "Jembatan Ampera"
   },
   {
    "index": 20,
@@ -468,9 +470,8 @@
     180,
     900,
     2500,
-    7000,
     8750,
-    10500
+    15750
    ],
    "houseCost": 1500,
    "icon": "ikan",
@@ -480,7 +481,8 @@
    ],
    "label": [
     "Manado"
-   ]
+   ],
+   "landmark": "Taman Laut Bunaken"
   },
   {
    "index": 22,
@@ -502,9 +504,8 @@
     180,
     900,
     2500,
-    7000,
     8750,
-    10500
+    15750
    ],
    "houseCost": 1500,
    "icon": "benteng",
@@ -514,7 +515,8 @@
    ],
    "label": [
     "Makassar"
-   ]
+   ],
+   "landmark": "Benteng Rotterdam"
   },
   {
    "index": 24,
@@ -526,9 +528,8 @@
     200,
     1000,
     3000,
-    7500,
     9250,
-    11000
+    16500
    ],
    "houseCost": 1500,
    "icon": "pura",
@@ -538,7 +539,8 @@
    ],
    "label": [
     "Denpasar"
-   ]
+   ],
+   "landmark": "Pura Jagatnatha"
   },
   {
    "index": 25,
@@ -561,9 +563,8 @@
     220,
     1100,
     3300,
-    8000,
     9750,
-    11500
+    17250
    ],
    "houseCost": 1500,
    "icon": "gunung",
@@ -573,7 +574,8 @@
    ],
    "label": [
     "Malang"
-   ]
+   ],
+   "landmark": "Gunung Bromo"
   },
   {
    "index": 27,
@@ -585,9 +587,8 @@
     220,
     1100,
     3300,
-    8000,
     9750,
-    11500
+    17250
    ],
    "houseCost": 1500,
    "icon": "gedung",
@@ -597,7 +598,8 @@
    ],
    "label": [
     "Semarang"
-   ]
+   ],
+   "landmark": "Lawang Sewu"
   },
   {
    "index": 28,
@@ -620,9 +622,8 @@
     240,
     1200,
     3600,
-    8500,
     10250,
-    12000
+    18000
    ],
    "houseCost": 1500,
    "icon": "tugu",
@@ -633,7 +634,8 @@
    "label": [
     "Yogya-",
     "karta"
-   ]
+   ],
+   "landmark": "Tugu Yogyakarta"
   },
   {
    "index": 30,
@@ -655,9 +657,8 @@
     260,
     1300,
     3900,
-    9000,
     11000,
-    12750
+    19100
    ],
    "houseCost": 2000,
    "icon": "istana",
@@ -667,7 +668,8 @@
    ],
    "label": [
     "Medan"
-   ]
+   ],
+   "landmark": "Istana Maimun"
   },
   {
    "index": 32,
@@ -679,9 +681,8 @@
     260,
     1300,
     3900,
-    9000,
     11000,
-    12750
+    19100
    ],
    "houseCost": 2000,
    "icon": "gedung",
@@ -691,7 +692,8 @@
    ],
    "label": [
     "Bandung"
-   ]
+   ],
+   "landmark": "Gedung Sate"
   },
   {
    "index": 33,
@@ -713,9 +715,8 @@
     280,
     1500,
     4500,
-    10000,
     12000,
-    14000
+    21000
    ],
    "houseCost": 2000,
    "icon": "monumen",
@@ -725,7 +726,8 @@
    ],
    "label": [
     "Surabaya"
-   ]
+   ],
+   "landmark": "Tugu Pahlawan"
   },
   {
    "index": 35,
@@ -758,9 +760,8 @@
     350,
     1750,
     5000,
-    11000,
     13000,
-    15000
+    22500
    ],
    "houseCost": 2000,
    "icon": "garuda",
@@ -771,7 +772,8 @@
    "label": [
     "IKN",
     "Nusantara"
-   ]
+   ],
+   "landmark": "Istana Garuda"
   },
   {
    "index": 38,
@@ -794,9 +796,8 @@
     500,
     2000,
     6000,
-    14000,
     17000,
-    20000
+    30000
    ],
    "houseCost": 2000,
    "icon": "monas",
@@ -806,7 +807,8 @@
    ],
    "label": [
     "Jakarta"
-   ]
+   ],
+   "landmark": "Monas"
   }
  ],
  "cards": {
@@ -863,7 +865,7 @@
    },
    {
     "id": "K11",
-    "text": "Musim hujan, atap bocor di mana-mana. Bayar 250 per rumah dan 1.000 per hotel.",
+    "text": "Musim hujan, atap bocor di mana-mana. Bayar 250 per rumah dan 1.000 per hotel/mall/landmark.",
     "effect": "repairs:250/1000"
    },
    {
@@ -965,7 +967,7 @@
    },
    {
     "id": "D15",
-    "text": "Iuran perbaikan jalan kampung. Bayar 400 per rumah dan 1.150 per hotel.",
+    "text": "Iuran perbaikan jalan kampung. Bayar 400 per rumah dan 1.150 per hotel/mall/landmark.",
     "effect": "repairs:400/1150"
    },
    {
