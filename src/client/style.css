@@ -224,6 +224,9 @@ label > select {
   border: 3px solid #000;
   cursor: pointer;
 }
+.icon-btn.leave-btn {
+  border-color: var(--red);
+}
 .turn-timer.hurry {
   color: #ff7b6b;
   animation: blink 0.5s steps(2) infinite;

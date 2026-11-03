@@ -19,6 +19,7 @@ export const ID = {
   notReady: 'Belum siap',
   start: 'Mulai',
   leave: 'Keluar',
+  leaveGame: 'Keluar permainan',
   settings: 'Aturan room',
   host: 'Host',
   waitingHost: 'Menunggu host memulai…',
