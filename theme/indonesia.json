@@ -1,0 +1,978 @@
+{
+ "id": "indonesia",
+ "name": "Indonesia",
+ "currency": {
+  "prefix": "Rp",
+  "suffix": "rb",
+  "note": "Semua nominal dalam Rp ribu"
+ },
+ "startMoneyOptions": [
+  10000,
+  15000,
+  20000
+ ],
+ "salary": 2000,
+ "jailIndex": 10,
+ "jailFine": 500,
+ "maxJailTurns": 3,
+ "transportRents": [
+  250,
+  500,
+  1000,
+  2000
+ ],
+ "utilityMultipliers": [
+  4,
+  10
+ ],
+ "utilityScale": 10,
+ "bank": {
+  "houses": 32,
+  "hotels": 12
+ },
+ "auction": {
+  "minBid": 10,
+  "timeoutSec": 15
+ },
+ "mortgageRate": 0.5,
+ "mortgageInterest": 0.1,
+ "buildingSellRate": 0.5,
+ "groups": [
+  {
+   "id": "cokelat",
+   "name": "Cokelat",
+   "color": "#8a4b2a",
+   "letter": "C"
+  },
+  {
+   "id": "birumuda",
+   "name": "Biru muda",
+   "color": "#7fc8f0",
+   "letter": "L"
+  },
+  {
+   "id": "merahmuda",
+   "name": "Merah muda",
+   "color": "#e8649c",
+   "letter": "P"
+  },
+  {
+   "id": "oranye",
+   "name": "Oranye",
+   "color": "#f08a24",
+   "letter": "O"
+  },
+  {
+   "id": "merah",
+   "name": "Merah",
+   "color": "#d62828",
+   "letter": "M"
+  },
+  {
+   "id": "kuning",
+   "name": "Kuning",
+   "color": "#f4d03f",
+   "letter": "K"
+  },
+  {
+   "id": "hijau",
+   "name": "Hijau",
+   "color": "#2e9e4f",
+   "letter": "H"
+  },
+  {
+   "id": "birutua",
+   "name": "Biru tua",
+   "color": "#1f3f8f",
+   "letter": "T"
+  }
+ ],
+ "tiles": [
+  {
+   "index": 0,
+   "type": "go",
+   "name": "START",
+   "icon": "start",
+   "label": [
+    "START"
+   ]
+  },
+  {
+   "index": 1,
+   "type": "city",
+   "name": "Kupang",
+   "group": "cokelat",
+   "price": 600,
+   "rent": [
+    20,
+    100,
+    300,
+    900,
+    1600,
+    2500
+   ],
+   "houseCost": 500,
+   "icon": "pantai",
+   "geo": [
+    123.6,
+    -10.2
+   ],
+   "label": [
+    "Kupang"
+   ]
+  },
+  {
+   "index": 2,
+   "type": "community",
+   "name": "Dana Umum",
+   "icon": "danaumum",
+   "label": [
+    "Dana",
+    "Umum"
+   ]
+  },
+  {
+   "index": 3,
+   "type": "city",
+   "name": "Mataram",
+   "group": "cokelat",
+   "price": 600,
+   "rent": [
+    40,
+    200,
+    600,
+    1800,
+    3200,
+    4500
+   ],
+   "houseCost": 500,
+   "icon": "masjid",
+   "geo": [
+    116.1,
+    -8.6
+   ],
+   "label": [
+    "Mataram"
+   ]
+  },
+  {
+   "index": 4,
+   "type": "tax",
+   "name": "Pajak Penghasilan",
+   "amount": 2000,
+   "icon": "pajak",
+   "label": [
+    "Pajak",
+    "PPh"
+   ]
+  },
+  {
+   "index": 5,
+   "type": "transport",
+   "name": "Stasiun Gambir",
+   "price": 2000,
+   "icon": "kereta",
+   "label": [
+    "St.",
+    "Gambir"
+   ]
+  },
+  {
+   "index": 6,
+   "type": "city",
+   "name": "Jayapura",
+   "group": "birumuda",
+   "price": 1000,
+   "rent": [
+    60,
+    300,
+    900,
+    2700,
+    4000,
+    5500
+   ],
+   "houseCost": 500,
+   "icon": "honai",
+   "geo": [
+    140.7,
+    -2.5
+   ],
+   "label": [
+    "Jayapura"
+   ]
+  },
+  {
+   "index": 7,
+   "type": "chance",
+   "name": "Kesempatan",
+   "icon": "kesempatan",
+   "label": [
+    "Kesem-",
+    "patan"
+   ]
+  },
+  {
+   "index": 8,
+   "type": "city",
+   "name": "Kendari",
+   "group": "birumuda",
+   "price": 1000,
+   "rent": [
+    60,
+    300,
+    900,
+    2700,
+    4000,
+    5500
+   ],
+   "houseCost": 500,
+   "icon": "jembatan",
+   "geo": [
+    122.5,
+    -4
+   ],
+   "label": [
+    "Kendari"
+   ]
+  },
+  {
+   "index": 9,
+   "type": "city",
+   "name": "Palu",
+   "group": "birumuda",
+   "price": 1200,
+   "rent": [
+    80,
+    400,
+    1000,
+    3000,
+    4500,
+    6000
+   ],
+   "houseCost": 500,
+   "icon": "jembatan",
+   "geo": [
+    119.9,
+    -0.9
+   ],
+   "label": [
+    "Palu"
+   ]
+  },
+  {
+   "index": 10,
+   "type": "jail",
+   "name": "Penjara / Hanya Mampir",
+   "icon": "penjara",
+   "label": [
+    "Penjara"
+   ]
+  },
+  {
+   "index": 11,
+   "type": "city",
+   "name": "Pontianak",
+   "group": "merahmuda",
+   "price": 1400,
+   "rent": [
+    100,
+    500,
+    1500,
+    4500,
+    6250,
+    7500
+   ],
+   "houseCost": 1000,
+   "icon": "tugu",
+   "geo": [
+    109.3,
+    0
+   ],
+   "label": [
+    "Ponti-",
+    "anak"
+   ]
+  },
+  {
+   "index": 12,
+   "type": "utility",
+   "name": "Perusahaan Listrik",
+   "price": 1500,
+   "icon": "listrik",
+   "label": [
+    "Listrik"
+   ]
+  },
+  {
+   "index": 13,
+   "type": "city",
+   "name": "Banjarmasin",
+   "group": "merahmuda",
+   "price": 1400,
+   "rent": [
+    100,
+    500,
+    1500,
+    4500,
+    6250,
+    7500
+   ],
+   "houseCost": 1000,
+   "icon": "perahu",
+   "geo": [
+    114.6,
+    -3.3
+   ],
+   "label": [
+    "Banjar-",
+    "masin"
+   ]
+  },
+  {
+   "index": 14,
+   "type": "city",
+   "name": "Samarinda",
+   "group": "merahmuda",
+   "price": 1600,
+   "rent": [
+    120,
+    600,
+    1800,
+    5000,
+    7000,
+    9000
+   ],
+   "houseCost": 1000,
+   "icon": "masjid",
+   "geo": [
+    117.1,
+    -0.5
+   ],
+   "label": [
+    "Sama-",
+    "rinda"
+   ]
+  },
+  {
+   "index": 15,
+   "type": "transport",
+   "name": "Pelabuhan Tanjung Perak",
+   "price": 2000,
+   "icon": "kapal",
+   "label": [
+    "Tj.",
+    "Perak"
+   ]
+  },
+  {
+   "index": 16,
+   "type": "city",
+   "name": "Padang",
+   "group": "oranye",
+   "price": 1800,
+   "rent": [
+    140,
+    700,
+    2000,
+    5500,
+    7500,
+    9500
+   ],
+   "houseCost": 1000,
+   "icon": "jamgadang",
+   "geo": [
+    100.4,
+    -0.95
+   ],
+   "label": [
+    "Padang"
+   ]
+  },
+  {
+   "index": 17,
+   "type": "community",
+   "name": "Dana Umum",
+   "icon": "danaumum",
+   "label": [
+    "Dana",
+    "Umum"
+   ]
+  },
+  {
+   "index": 18,
+   "type": "city",
+   "name": "Pekanbaru",
+   "group": "oranye",
+   "price": 1800,
+   "rent": [
+    140,
+    700,
+    2000,
+    5500,
+    7500,
+    9500
+   ],
+   "houseCost": 1000,
+   "icon": "rumahadat",
+   "geo": [
+    101.4,
+    0.5
+   ],
+   "label": [
+    "Pekan-",
+    "baru"
+   ]
+  },
+  {
+   "index": 19,
+   "type": "city",
+   "name": "Palembang",
+   "group": "oranye",
+   "price": 2000,
+   "rent": [
+    160,
+    800,
+    2200,
+    6000,
+    8000,
+    10000
+   ],
+   "houseCost": 1000,
+   "icon": "ampera",
+   "geo": [
+    104.7,
+    -3
+   ],
+   "label": [
+    "Palem-",
+    "bang"
+   ]
+  },
+  {
+   "index": 20,
+   "type": "parking",
+   "name": "Parkir Bebas",
+   "icon": "parkir",
+   "label": [
+    "Parkir",
+    "Bebas"
+   ]
+  },
+  {
+   "index": 21,
+   "type": "city",
+   "name": "Manado",
+   "group": "merah",
+   "price": 2200,
+   "rent": [
+    180,
+    900,
+    2500,
+    7000,
+    8750,
+    10500
+   ],
+   "houseCost": 1500,
+   "icon": "ikan",
+   "geo": [
+    124.8,
+    1.5
+   ],
+   "label": [
+    "Manado"
+   ]
+  },
+  {
+   "index": 22,
+   "type": "chance",
+   "name": "Kesempatan",
+   "icon": "kesempatan",
+   "label": [
+    "Kesem-",
+    "patan"
+   ]
+  },
+  {
+   "index": 23,
+   "type": "city",
+   "name": "Makassar",
+   "group": "merah",
+   "price": 2200,
+   "rent": [
+    180,
+    900,
+    2500,
+    7000,
+    8750,
+    10500
+   ],
+   "houseCost": 1500,
+   "icon": "benteng",
+   "geo": [
+    119.4,
+    -5.1
+   ],
+   "label": [
+    "Makassar"
+   ]
+  },
+  {
+   "index": 24,
+   "type": "city",
+   "name": "Denpasar",
+   "group": "merah",
+   "price": 2400,
+   "rent": [
+    200,
+    1000,
+    3000,
+    7500,
+    9250,
+    11000
+   ],
+   "houseCost": 1500,
+   "icon": "pura",
+   "geo": [
+    115.2,
+    -8.65
+   ],
+   "label": [
+    "Denpasar"
+   ]
+  },
+  {
+   "index": 25,
+   "type": "transport",
+   "name": "Bandara Soekarno-Hatta",
+   "price": 2000,
+   "icon": "pesawat",
+   "label": [
+    "Bandara",
+    "Soetta"
+   ]
+  },
+  {
+   "index": 26,
+   "type": "city",
+   "name": "Malang",
+   "group": "kuning",
+   "price": 2600,
+   "rent": [
+    220,
+    1100,
+    3300,
+    8000,
+    9750,
+    11500
+   ],
+   "houseCost": 1500,
+   "icon": "gunung",
+   "geo": [
+    112.6,
+    -7.98
+   ],
+   "label": [
+    "Malang"
+   ]
+  },
+  {
+   "index": 27,
+   "type": "city",
+   "name": "Semarang",
+   "group": "kuning",
+   "price": 2600,
+   "rent": [
+    220,
+    1100,
+    3300,
+    8000,
+    9750,
+    11500
+   ],
+   "houseCost": 1500,
+   "icon": "gedung",
+   "geo": [
+    110.4,
+    -6.97
+   ],
+   "label": [
+    "Semarang"
+   ]
+  },
+  {
+   "index": 28,
+   "type": "utility",
+   "name": "Perusahaan Air Minum",
+   "price": 1500,
+   "icon": "air",
+   "label": [
+    "Air",
+    "Minum"
+   ]
+  },
+  {
+   "index": 29,
+   "type": "city",
+   "name": "Yogyakarta",
+   "group": "kuning",
+   "price": 2800,
+   "rent": [
+    240,
+    1200,
+    3600,
+    8500,
+    10250,
+    12000
+   ],
+   "houseCost": 1500,
+   "icon": "tugu",
+   "geo": [
+    110.37,
+    -7.78
+   ],
+   "label": [
+    "Yogya-",
+    "karta"
+   ]
+  },
+  {
+   "index": 30,
+   "type": "gotojail",
+   "name": "Masuk Penjara",
+   "icon": "polisi",
+   "label": [
+    "Masuk",
+    "Penjara"
+   ]
+  },
+  {
+   "index": 31,
+   "type": "city",
+   "name": "Medan",
+   "group": "hijau",
+   "price": 3000,
+   "rent": [
+    260,
+    1300,
+    3900,
+    9000,
+    11000,
+    12750
+   ],
+   "houseCost": 2000,
+   "icon": "istana",
+   "geo": [
+    98.7,
+    3.6
+   ],
+   "label": [
+    "Medan"
+   ]
+  },
+  {
+   "index": 32,
+   "type": "city",
+   "name": "Bandung",
+   "group": "hijau",
+   "price": 3000,
+   "rent": [
+    260,
+    1300,
+    3900,
+    9000,
+    11000,
+    12750
+   ],
+   "houseCost": 2000,
+   "icon": "gedung",
+   "geo": [
+    107.6,
+    -6.9
+   ],
+   "label": [
+    "Bandung"
+   ]
+  },
+  {
+   "index": 33,
+   "type": "community",
+   "name": "Dana Umum",
+   "icon": "danaumum",
+   "label": [
+    "Dana",
+    "Umum"
+   ]
+  },
+  {
+   "index": 34,
+   "type": "city",
+   "name": "Surabaya",
+   "group": "hijau",
+   "price": 3200,
+   "rent": [
+    280,
+    1500,
+    4500,
+    10000,
+    12000,
+    14000
+   ],
+   "houseCost": 2000,
+   "icon": "monumen",
+   "geo": [
+    112.75,
+    -7.25
+   ],
+   "label": [
+    "Surabaya"
+   ]
+  },
+  {
+   "index": 35,
+   "type": "transport",
+   "name": "Stasiun Tugu",
+   "price": 2000,
+   "icon": "kereta",
+   "label": [
+    "St.",
+    "Tugu"
+   ]
+  },
+  {
+   "index": 36,
+   "type": "chance",
+   "name": "Kesempatan",
+   "icon": "kesempatan",
+   "label": [
+    "Kesem-",
+    "patan"
+   ]
+  },
+  {
+   "index": 37,
+   "type": "city",
+   "name": "IKN Nusantara",
+   "group": "birutua",
+   "price": 3500,
+   "rent": [
+    350,
+    1750,
+    5000,
+    11000,
+    13000,
+    15000
+   ],
+   "houseCost": 2000,
+   "icon": "garuda",
+   "geo": [
+    116.7,
+    -0.97
+   ],
+   "label": [
+    "IKN",
+    "Nusantara"
+   ]
+  },
+  {
+   "index": 38,
+   "type": "tax",
+   "name": "Pajak Barang Mewah",
+   "amount": 1000,
+   "icon": "cincin",
+   "label": [
+    "Pajak",
+    "PPnBM"
+   ]
+  },
+  {
+   "index": 39,
+   "type": "city",
+   "name": "Jakarta",
+   "group": "birutua",
+   "price": 4000,
+   "rent": [
+    500,
+    2000,
+    6000,
+    14000,
+    17000,
+    20000
+   ],
+   "houseCost": 2000,
+   "icon": "monas",
+   "geo": [
+    106.8,
+    -6.2
+   ],
+   "label": [
+    "Jakarta"
+   ]
+  }
+ ],
+ "cards": {
+  "chance": [
+   {
+    "id": "K1",
+    "text": "Mudik lebaran lancar! Maju ke START.",
+    "effect": "move_to:0"
+   },
+   {
+    "id": "K2",
+    "text": "Liburan ke Bali. Maju ke Denpasar.",
+    "effect": "move_to:24"
+   },
+   {
+    "id": "K3",
+    "text": "Foto di Tugu Khatulistiwa. Maju ke Pontianak.",
+    "effect": "move_to:11"
+   },
+   {
+    "id": "K4",
+    "text": "Listrik rumah padam, cek ke kantor terdekat. Maju ke utilitas terdekat; jika ada pemiliknya, bayar 10× dadu × 10.",
+    "effect": "nearest:utility"
+   },
+   {
+    "id": "K5",
+    "text": "Kejar jadwal keberangkatan! Maju ke transportasi terdekat; bayar 2× sewa ke pemiliknya.",
+    "effect": "nearest:transport"
+   },
+   {
+    "id": "K6",
+    "text": "Salah naik moda, putar balik! Maju ke transportasi terdekat; bayar 2× sewa ke pemiliknya.",
+    "effect": "nearest:transport"
+   },
+   {
+    "id": "K7",
+    "text": "Bank membagikan dividen. Terima 500.",
+    "effect": "collect:500"
+   },
+   {
+    "id": "K8",
+    "text": "Dapat surat keterangan berkelakuan baik. Bebas dari Penjara.",
+    "effect": "jail_free"
+   },
+   {
+    "id": "K9",
+    "text": "Kelewatan gang, mundur 3 petak.",
+    "effect": "move_relative:-3"
+   },
+   {
+    "id": "K10",
+    "text": "Kena razia! Masuk penjara tanpa lewat START.",
+    "effect": "go_to_jail"
+   },
+   {
+    "id": "K11",
+    "text": "Musim hujan, atap bocor di mana-mana. Bayar 250 per rumah dan 1.000 per hotel.",
+    "effect": "repairs:250/1000"
+   },
+   {
+    "id": "K12",
+    "text": "Lupa bawa SIM, kena tilang. Bayar 150.",
+    "effect": "pay:150"
+   },
+   {
+    "id": "K13",
+    "text": "Naik kereta dari Stasiun Gambir. Maju ke Stasiun Gambir; lewat START terima 2.000.",
+    "effect": "move_to:5"
+   },
+   {
+    "id": "K14",
+    "text": "Rapat penting di ibu kota. Maju ke Jakarta.",
+    "effect": "move_to:39"
+   },
+   {
+    "id": "K15",
+    "text": "Terpilih jadi ketua panitia 17-an, traktir semua orang. Bayar 500 ke tiap pemain.",
+    "effect": "pay_each:500"
+   },
+   {
+    "id": "K16",
+    "text": "Simpanan koperasi jatuh tempo. Terima 1.500.",
+    "effect": "collect:1500"
+   }
+  ],
+  "community": [
+   {
+    "id": "D1",
+    "text": "Menang lomba lari amal. Maju ke START.",
+    "effect": "move_to:0"
+   },
+   {
+    "id": "D2",
+    "text": "Bank salah transfer ke rekeningmu. Terima 2.000.",
+    "effect": "collect:2000"
+   },
+   {
+    "id": "D3",
+    "text": "Periksa ke dokter. Bayar 500.",
+    "effect": "pay:500"
+   },
+   {
+    "id": "D4",
+    "text": "Untung jual saham. Terima 500.",
+    "effect": "collect:500"
+   },
+   {
+    "id": "D5",
+    "text": "Ikut kerja bakti bersihkan kampung. Bebas dari Penjara.",
+    "effect": "jail_free"
+   },
+   {
+    "id": "D6",
+    "text": "Main petasan tengah malam, warga melapor. Masuk penjara.",
+    "effect": "go_to_jail"
+   },
+   {
+    "id": "D7",
+    "text": "Kamu menggelar hajatan. Terima 500 dari tiap pemain.",
+    "effect": "collect_each:500"
+   },
+   {
+    "id": "D8",
+    "text": "THR cair! Terima 1.000.",
+    "effect": "collect:1000"
+   },
+   {
+    "id": "D9",
+    "text": "Restitusi pajak cair. Terima 200.",
+    "effect": "collect:200"
+   },
+   {
+    "id": "D10",
+    "text": "Hari ulang tahunmu. Terima 100 dari tiap pemain.",
+    "effect": "collect_each:100"
+   },
+   {
+    "id": "D11",
+    "text": "Asuransi jiwa jatuh tempo. Terima 1.000.",
+    "effect": "collect:1000"
+   },
+   {
+    "id": "D12",
+    "text": "Biaya rawat inap rumah sakit. Bayar 1.000.",
+    "effect": "pay:1000"
+   },
+   {
+    "id": "D13",
+    "text": "Bayar uang gedung sekolah. Bayar 500.",
+    "effect": "pay:500"
+   },
+   {
+    "id": "D14",
+    "text": "Honor jadi MC kondangan. Terima 250.",
+    "effect": "collect:250"
+   },
+   {
+    "id": "D15",
+    "text": "Iuran perbaikan jalan kampung. Bayar 400 per rumah dan 1.150 per hotel.",
+    "effect": "repairs:400/1150"
+   },
+   {
+    "id": "D16",
+    "text": "Juara 2 lomba panjat pinang 17 Agustus. Terima 100.",
+    "effect": "collect:100"
+   }
+  ]
+ }
+}
