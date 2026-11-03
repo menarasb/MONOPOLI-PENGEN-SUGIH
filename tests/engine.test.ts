@@ -179,6 +179,83 @@ describe('sewa', () => {
   });
 });
 
+describe('ambil alih', () => {
+  it('setelah bayar sewa, pemain boleh ambil alih seharga 2x ke pemilik', () => {
+    const g = setup();
+    g.s.props[3].owner = 'B';
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    expect(g.s.stage).toBe('takeover');
+    expect(g.s.pendingTakeover).toBe(3);
+    const price = theme.tiles[3].price! * 2;
+    expect(engine.takeoverPrice(g.s, 3)).toBe(price);
+    g.act('A', { type: 'takeover' });
+    expect(g.s.props[3].owner).toBe('A');
+    expect(P(g.s, 'A').money).toBe(15000 - 40 - price);
+    expect(P(g.s, 'B').money).toBe(15000 + 40 + price);
+    expect(g.s.stage).toBe('end');
+  });
+
+  it('harga ikut bangunan dan bangunan pindah ke pengambil alih', () => {
+    const g = setup();
+    g.s.props[1].owner = 'B';
+    g.s.props[3].owner = 'B';
+    g.s.props[3].houses = 2;
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    const t = theme.tiles[3];
+    expect(engine.takeoverPrice(g.s, 3)).toBe((t.price! + t.houseCost! * 2) * 2);
+    g.act('A', { type: 'takeover' });
+    expect(g.s.props[3]).toMatchObject({ owner: 'A', houses: 2 });
+  });
+
+  it('boleh dilewati; habis waktu otomatis dilewati', () => {
+    const g = setup();
+    g.s.props[3].owner = 'B';
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    g.act('A', { type: 'declineTakeover' });
+    expect(g.s.props[3].owner).toBe('B');
+    expect(g.s.stage).toBe('end');
+
+    const h = setup();
+    h.s.props[3].owner = 'B';
+    h.rng.dice(1, 2);
+    h.act('A', { type: 'roll' });
+    engine.autoAct(h.s, h.ctx());
+    expect(h.s.props[3].owner).toBe('B');
+    expect(h.s.stage).toBe('end');
+  });
+
+  it('uang kurang ditolak; properti tergadai tidak ditawarkan', () => {
+    const g = setup();
+    g.s.props[3].owner = 'B';
+    P(g.s, 'A').money = 100;
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    expect(g.s.stage).toBe('takeover');
+    expect(g.tryAct('A', { type: 'takeover' }).ok).toBe(false);
+    expect(g.s.props[3].owner).toBe('B');
+
+    const h = setup();
+    h.s.props[3].owner = 'B';
+    h.s.props[3].mortgaged = true;
+    h.rng.dice(1, 2);
+    h.act('A', { type: 'roll' });
+    expect(h.s.stage).toBe('end');
+  });
+
+  it('tidak ditawarkan bila sewa belum lunas (utang)', () => {
+    const g = setup();
+    g.s.props[3].owner = 'B';
+    P(g.s, 'A').money = 10;
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    expect(g.s.stage).toBe('debt');
+    expect(g.s.pendingTakeover ?? null).toBe(null);
+  });
+});
+
 describe('lelang', () => {
   it('menolak beli memulai lelang; penawar tertinggi menang setelah 15 detik', () => {
     const g = setup();

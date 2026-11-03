@@ -91,6 +91,7 @@ export class Engine {
       doublesCount: 0,
       rollAgain: false,
       pendingBuy: null,
+      pendingTakeover: null,
       debts: [],
       resume: null,
       auction: null,
@@ -210,6 +211,27 @@ export class Engine {
     return 0;
   }
 
+  /** Pengali harga ambil alih properti lawan. */
+  static readonly TAKEOVER_MULT = 2;
+
+  /** Harga ambil alih = 2x (harga tanah + harga bangunan di atasnya); dibayar ke pemilik. */
+  takeoverPrice(s: GameState, i: number): number {
+    const t = this.tile(i);
+    const o = s.props[i];
+    const buildings = t.type === 'city' ? (t.houseCost ?? 0) * (o?.houses ?? 0) : 0;
+    return ((t.price ?? 0) + buildings) * Engine.TAKEOVER_MULT;
+  }
+
+  /** Alasan ambil alih tidak boleh, atau null bila boleh (tanpa cek uang). */
+  canTakeover(s: GameState, pid: string, i: number): string | null {
+    const o = s.props[i];
+    if (!o || !o.owner) return 'Properti belum dimiliki siapa pun';
+    if (o.owner === pid) return 'Sudah propertimu';
+    if (o.mortgaged) return 'Properti tergadai tidak bisa diambil alih';
+    if (this.player(s, o.owner).bankrupt) return 'Pemilik sudah bangkrut';
+    return null;
+  }
+
   /** Uang + nilai jual bangunan + nilai gadai properti yang belum tergadai. */
   liquidationValue(s: GameState, id: string): number {
     const p = this.player(s, id);
@@ -313,6 +335,34 @@ export class Engine {
         } else {
           this.log(s, `${p.name} tidak membeli ${this.tile(i).name}.`);
         }
+        return this.settle(s, ctx, ev);
+      }
+      case 'takeover': {
+        this.requireTurn(s, p, 'takeover');
+        const i = s.pendingTakeover!;
+        const err = this.canTakeover(s, p.id, i);
+        if (err) fail(err);
+        const price = this.takeoverPrice(s, i);
+        if (p.money - this.debtOf(s, p.id) < price)
+          fail(`Uang kurang ${fmt(price - p.money)}. Gadaikan/jual aset dulu atau lewati.`);
+        const o = s.props[i];
+        const owner = this.player(s, o.owner!);
+        this.transfer(s, p.id, owner.id, price);
+        o.owner = p.id;
+        p.stats.bought += 1;
+        p.expression = 'senang';
+        owner.expression = 'kaget';
+        s.pendingTakeover = null;
+        // Tawaran tukar yang memuat properti ini jadi tidak berlaku.
+        s.trades = s.trades.filter((t) => !t.give.tiles.includes(i) && !t.get.tiles.includes(i));
+        const b = o.houses === 5 ? ' beserta hotelnya' : o.houses > 0 ? ` beserta ${o.houses} rumahnya` : '';
+        this.log(s, `${p.name} MENGAMBIL ALIH ${this.tile(i).name}${b} dari ${owner.name} seharga ${fmt(price)}!`);
+        ev.push({ t: 'sfx', name: 'buy' }, { t: 'toast', text: `${p.name} ambil alih ${this.tile(i).name}!` });
+        return this.settle(s, ctx, ev);
+      }
+      case 'declineTakeover': {
+        this.requireTurn(s, p, 'takeover');
+        s.pendingTakeover = null;
         return this.settle(s, ctx, ev);
       }
       case 'bid': {
@@ -440,6 +490,14 @@ export class Engine {
         this.setStage(s, 'buy', ctx);
         return;
       }
+      if (s.pendingTakeover != null) {
+        const cur = this.current(s);
+        if (!cur.bankrupt && this.canTakeover(s, cur.id, s.pendingTakeover) === null) {
+          if (s.stage !== 'takeover') this.setStage(s, 'takeover', ctx);
+          return;
+        }
+        s.pendingTakeover = null;
+      }
       if (s.resume) {
         const r = s.resume;
         s.resume = null;
@@ -468,6 +526,7 @@ export class Engine {
     s.doublesCount = 0;
     s.dice = null;
     s.pendingBuy = null;
+    s.pendingTakeover = null;
     if (this.alive(s).length <= 1) return this.endGame(s, 'last');
     if (s.endsAt !== null && ctx.now >= s.endsAt) return this.endGame(s, 'time');
     let i = s.turnIndex;
@@ -597,6 +656,8 @@ export class Engine {
         ev.push({ t: 'sfx', name: 'rent' });
         if (rent >= 2000) p.expression = 'sedih';
         this.charge(s, p.id, owner.id, rent, `Sewa ${t.name}`, true);
+        // Setelah bayar sewa (tanpa utang), pemain boleh mengambil alih properti ini.
+        if (this.debtOf(s, p.id) === 0) s.pendingTakeover = i;
         return;
       }
       case 'tax':
@@ -773,6 +834,7 @@ export class Engine {
       s.resume = null;
       s.rollAgain = false;
       s.pendingBuy = null;
+      s.pendingTakeover = null;
     }
     if (this.alive(s).length <= 1) this.endGame(s, left ? 'left' : 'last');
   }
@@ -984,6 +1046,9 @@ export class Engine {
         break;
       case 'buy':
         this.dispatch(s, cur, { type: 'decline' }, ctx, ev);
+        break;
+      case 'takeover':
+        this.dispatch(s, cur, { type: 'declineTakeover' }, ctx, ev);
         break;
       case 'end':
         this.nextTurn(s, ctx);

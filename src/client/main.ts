@@ -866,6 +866,23 @@ function renderActions() {
         else html = `<p class="prompt"><b>${esc(cur.name)}</b> sedang memutuskan membeli ${esc(t.name)}…</p>`;
         break;
       }
+      case 'takeover': {
+        const i = g.pendingTakeover!;
+        const t = theme.tiles[i];
+        const o = g.props[i];
+        const price = engine.takeoverPrice(asState(), i);
+        const owner = pname(o.owner);
+        const bld = o.houses === 5 ? ' + hotel' : o.houses > 0 ? ` + ${o.houses} rumah` : '';
+        if (myTurn) {
+          const free = me.money - engine.debtOf(asState(), me.id);
+          html = `${tileTitle(i)}<p>Ambil alih dari <b>${esc(owner)}</b>${bld}? Bayar <b>${fmt(price)}</b> (2x harga) ke ${esc(owner)}. Uangmu ${fmt(me.money)}.</p>
+          ${free < price ? `<p class="bad">Uang kurang ${fmt(price - free)}. Gadai/jual aset dulu kalau mau ambil alih.</p>` : ''}
+          <div class="btns">${btn('takeover', `${T.takeover} ${fmt(price)}`, 'primary', free < price)}${btn('declineTakeover', T.skipBuy)}</div>
+          <button class="btn link" data-tile="${i}">Lihat detail sewa</button>`;
+        } else
+          html = `<p class="prompt"><b>${esc(cur.name)}</b> sedang menimbang mengambil alih ${esc(t.name)} milik ${esc(owner)} (${fmt(price)})…</p>`;
+        break;
+      }
       case 'auction': {
         const a = g.auction!;
         const t = theme.tiles[a.tile];

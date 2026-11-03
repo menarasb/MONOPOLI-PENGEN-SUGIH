@@ -27,6 +27,7 @@ export const ID = {
   payJail: 'Bayar Denda',
   useCard: 'Pakai Kartu Bebas',
   buy: 'Beli',
+  takeover: 'Ambil Alih',
   skipBuy: 'Tidak',
   endTurn: 'Akhiri Giliran',
   manage: 'Properti & Bangun',

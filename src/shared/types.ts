@@ -182,7 +182,7 @@ export interface Trade {
   get: Offer; // dari penerima ke pengusul
 }
 
-export type Stage = 'roll' | 'buy' | 'auction' | 'debt' | 'end' | 'gameover';
+export type Stage = 'roll' | 'buy' | 'takeover' | 'auction' | 'debt' | 'end' | 'gameover';
 
 export type Resume = { kind: 'move'; steps: number } | null;
 
@@ -207,6 +207,8 @@ export interface GameState {
   doublesCount: number;
   rollAgain: boolean;
   pendingBuy: number | null;
+  /** Petak milik lawan yang boleh diambil alih pemain giliran ini (setelah bayar sewa). */
+  pendingTakeover?: number | null;
   debts: Debt[];
   resume: Resume;
   auction: Auction | null;
@@ -230,6 +232,8 @@ export type Action =
   | { type: 'useJailCard' }
   | { type: 'buy' }
   | { type: 'decline' }
+  | { type: 'takeover' }
+  | { type: 'declineTakeover' }
   | { type: 'bid'; amount: number }
   | { type: 'build'; tile: number }
   | { type: 'sell'; tile: number }
