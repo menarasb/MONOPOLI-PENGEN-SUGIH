@@ -584,6 +584,9 @@ function mountGame() {
   </main>`;
   bindHeader();
   board = new BoardView(theme);
+  moneyTarget.clear();
+  moneyShown.clear();
+  moneyTweens.clear();
   board.onTile = (i) => showTile(i);
   board.onCard = (deck, text) => showCard(deck, text);
   $('#board-wrap').appendChild(board.canvas);
@@ -630,6 +633,7 @@ function updateGame(events: GameEvent[], _prev: PublicRoom | null) {
   g.players.forEach((p, i) => board!.colors.set(p.id, PLAYER_COLORS[i % 4]));
   board.setState(g, events);
   for (const ev of events) if (ev.t === 'toast') toast(ev.text);
+  trackMoney(g);
   renderPlayers();
   renderActions();
   renderLog();
@@ -638,6 +642,108 @@ function updateGame(events: GameEvent[], _prev: PublicRoom | null) {
     app.shownGameOver = true;
     const wait = () => (board?.busy ? setTimeout(wait, 300) : showGameOver());
     setTimeout(wait, 600);
+  }
+}
+
+// ---------------------------------------------------------------- animasi & notifikasi uang
+
+/** nilai uang terakhir dari server, nilai yang sedang ditampilkan, dan animasi hitung berjalan */
+const moneyTarget = new Map<string, number>();
+const moneyShown = new Map<string, number>();
+const moneyTweens = new Map<string, { from: number; to: number; t0: number; dir: 'up' | 'down' }>();
+let moneyRaf = 0;
+
+function trackMoney(g: PublicGameState) {
+  const diffs: { pid: string; delta: number; to: number }[] = [];
+  for (const p of g.players) {
+    const prev = moneyTarget.get(p.id);
+    moneyTarget.set(p.id, p.money);
+    if (prev === undefined) moneyShown.set(p.id, p.money);
+    else if (prev !== p.money) diffs.push({ pid: p.id, delta: p.money - prev, to: p.money });
+  }
+  // tampilkan setelah dadu & bidak selesai bergerak, supaya terasa "saat mendarat"
+  if (diffs.length) board?.after(() => diffs.forEach((d, k) => setTimeout(() => moneyChanged(d.pid, d.delta, d.to), k * 140)));
+}
+
+function moneyChanged(pid: string, delta: number, to: number) {
+  if (app.screen !== 'game' || !app.room?.game) return;
+  const p = game().players.find((x) => x.id === pid);
+  if (!p) return;
+  const from = moneyShown.get(pid) ?? to - delta;
+  moneyTweens.set(pid, { from, to, t0: performance.now(), dir: delta > 0 ? 'up' : 'down' });
+  if (!moneyRaf) moneyRaf = requestAnimationFrame(tickMoney);
+  board?.floatMoney(pid, delta);
+  moneyToast(pid, delta);
+  moneyPop(pid, delta);
+}
+
+function tickMoney(now: number) {
+  moneyRaf = 0;
+  const DUR = 900;
+  for (const [pid, tw] of moneyTweens) {
+    const k = Math.min(1, (now - tw.t0) / DUR);
+    const e = 1 - Math.pow(1 - k, 3);
+    moneyShown.set(pid, Math.round(tw.from + (tw.to - tw.from) * e));
+    const el = document.querySelector<HTMLElement>(`.pcard[data-pid="${pid}"] .money`);
+    const p = app.room?.game?.players.find((x) => x.id === pid);
+    if (el && p && !p.bankrupt) {
+      el.textContent = fmt(moneyShown.get(pid)!);
+      el.classList.toggle('up', k < 1 && tw.dir === 'up');
+      el.classList.toggle('down', k < 1 && tw.dir === 'down');
+    }
+    if (k >= 1) moneyTweens.delete(pid);
+  }
+  if (moneyTweens.size) moneyRaf = requestAnimationFrame(tickMoney);
+}
+
+function moneyToast(pid: string, delta: number) {
+  const box = $('#money-toasts');
+  // taruh di area laut di tengah papan supaya tidak menutupi tombol aksi
+  const br = board?.canvas.getBoundingClientRect();
+  if (br && br.width > 0 && window.innerWidth > 520) {
+    box.style.left = `${br.left + br.width / 2}px`;
+    box.style.top = `${Math.max(8, br.top + br.height * 0.2)}px`;
+  } else {
+    box.style.left = '50%';
+    box.style.top = '8px';
+  }
+  const up = delta > 0;
+  const mine = pid === app.session?.playerId;
+  const el = document.createElement('div');
+  el.className = `mtoast ${up ? 'up' : 'down'} ${mine ? 'mine' : ''}`;
+  el.style.setProperty('--pc', colorOf(pid));
+  el.innerHTML = `<span class="mt-ico">${up ? '💰' : '💸'}</span><span class="mt-txt"><span class="mt-name">${mine ? 'Kamu' : esc(pname(pid))}</span>${up ? 'dapat' : 'bayar'}</span><b class="mt-amt">${up ? '+' : '−'}${fmt(Math.abs(delta))}</b>`;
+  box.appendChild(el);
+  while (box.children.length > 4) box.firstElementChild!.remove();
+  setTimeout(() => el.classList.add('out'), 2600);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function moneyPop(pid: string, delta: number) {
+  const target = document.querySelector(`.pcard[data-pid="${pid}"] .money`);
+  if (!target) return;
+  const r = target.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight) return;
+  const up = delta > 0;
+  const el = document.createElement('div');
+  el.className = `money-pop ${up ? 'up' : 'down'}`;
+  el.textContent = `${up ? '+' : '−'}${fmt(Math.abs(delta))}`;
+  el.style.left = `${r.right + 10}px`;
+  el.style.top = `${r.top - 2}px`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+  // koin pixel memancar (dapat) atau jatuh (bayar)
+  const n = Math.min(8, 3 + Math.floor(Math.log10(Math.abs(delta) + 1) * 1.5));
+  for (let k = 0; k < n; k++) {
+    const c = document.createElement('div');
+    c.className = `coin ${up ? 'up' : 'down'}`;
+    c.style.left = `${r.left + 10 + Math.random() * 30}px`;
+    c.style.top = `${r.top + 6}px`;
+    c.style.setProperty('--dx', `${(Math.random() - 0.5) * 80}px`);
+    c.style.setProperty('--dy', `${up ? -(30 + Math.random() * 40) : 30 + Math.random() * 40}px`);
+    c.style.animationDelay = `${k * 40}ms`;
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 1100 + k * 40);
   }
 }
 
@@ -674,7 +780,7 @@ function renderPlayers() {
         <div class="pinfo">
           <div class="pname">${esc(p.name)}${p.id === app.session?.playerId ? ' <span class="tag you">kamu</span>' : ''}${app.room!.hostId === p.id ? ' <span class="tag">host</span>' : ''}</div>
           <div class="small muted">${esc(p.character.name)}</div>
-          <div class="money">${p.bankrupt ? 'BANGKRUT' : fmt(p.money)}</div>
+          <div class="money ${moneyTweens.get(p.id)?.dir ?? ''}">${p.bankrupt ? 'BANGKRUT' : fmt(moneyShown.get(p.id) ?? p.money)}</div>
           <div class="flags small">${p.inJail ? '<span class="tag jail">di penjara</span>' : ''}${p.jailFreeCards.length ? `<span class="tag">🎫×${p.jailFreeCards.length}</span>` : ''}${rp && !rp.connected ? `<span class="tag off">terputus${rp.reconnectLeft !== null ? ` ${rp.reconnectLeft}s` : ''}</span>` : ''}</div>
           <div class="chips">${chips}</div>
         </div>

@@ -2,7 +2,8 @@
 import type { PublicGameState } from '../shared/engine';
 import type { GameEvent, Theme } from '../shared/types';
 import { audio } from './audio';
-import { building, drawDie, head, icon, PAL, shiftColor } from './sprites';
+import { formatMoney } from '../shared/format';
+import { building, drawDie, head, icon, PAL, shiftColor, type BuildingSprite } from './sprites';
 
 const L = 480;
 const C = 51; // sudut
@@ -110,6 +111,31 @@ function landGrid(): boolean[][] {
   return g;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  g: number;
+  t0: number;
+  life: number;
+  col: string;
+  size: number;
+  star?: boolean;
+}
+
+interface MoneyFloat {
+  pid: string;
+  delta: number;
+  t0: number;
+}
+
+const easeOutBack = (k: number) => {
+  const c = 2.2;
+  return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2);
+};
+const clamp01 = (k: number) => Math.max(0, Math.min(1, k));
+
 interface TokenAnim {
   from: [number, number];
   to: [number, number];
@@ -130,6 +156,10 @@ export class BoardView {
   private queue: (() => Promise<void>)[] = [];
   private running = false;
   private dice: { vals: [number, number]; rolling: number } | null = null;
+  private shownHouses = new Map<number, number>();
+  private bAnims = new Map<number, { from: number; to: number; t0: number; dur: number }>();
+  private particles: Particle[] = [];
+  private floats: MoneyFloat[] = [];
   colors = new Map<string, string>();
   highlight: number | null = null;
   onTile: (i: number) => void = () => {};
@@ -176,6 +206,17 @@ export class BoardView {
     }
     this.queue.push(async () => this.sync());
     if (!this.running) void this.run();
+  }
+
+  /** Jalankan fn setelah semua animasi yang sedang antre selesai. */
+  after(fn: () => void) {
+    this.queue.push(async () => fn());
+    if (!this.running) void this.run();
+  }
+
+  /** Angka uang melayang di atas bidak pemain. */
+  floatMoney(pid: string, delta: number) {
+    if (delta) this.floats.push({ pid, delta, t0: performance.now() });
   }
 
   /** true bila animasi masih berjalan (UI bisa menunda pop-up). */
@@ -377,24 +418,8 @@ export class BoardView {
       ctx.fillRect(sx * S, sy * S, sw * S, sh * S);
       ctx.strokeRect(sx * S + 1, sy * S + 1, sw * S - 2, sh * S - 2);
       const light = ['kuning', 'birumuda'].includes(group.id);
-      // bangunan atau huruf grup
-      if (o && o.houses > 0) {
-        if (o.houses === 5) {
-          const b = building('hotel');
-          const vertical = r.side === 'left' || r.side === 'right';
-          const bx = vertical ? sx + 1.5 : sx + sw / 2 - 4;
-          const by = vertical ? sy + sh / 2 - 6 : sy + 0;
-          ctx.drawImage(b, bx * S, by * S, 8 * S, (vertical ? 12 : 11) * S);
-        } else {
-          for (let k = 0; k < o.houses; k++) {
-            const b = building('house', (i + k) % 4);
-            const vertical = r.side === 'left' || r.side === 'right';
-            const bx = vertical ? sx + 1.5 : sx + 1 + k * 10;
-            const by = vertical ? sy + 1 + k * 10 : sy + 1.5;
-            ctx.drawImage(b, bx * S, by * S, 8 * S, 8 * S);
-          }
-        }
-      } else {
+      // huruf grup (bangunan digambar terpisah di lapisan dinamis agar bisa dianimasikan)
+      if (!o || o.houses === 0) {
         this.text(ctx, group.letter, (sx + sw / 2) * S, (sy + sh / 2 - 4) * S + 1, 8, light ? PAL.k : '#fff8e7');
       }
     }
@@ -457,6 +482,9 @@ export class BoardView {
       ctx.strokeRect(r.x * S, r.y * S, r.w * S, r.h * S);
     }
 
+    this.drawBuildings(ctx, now);
+    this.drawParticles(ctx, now);
+
     // dadu
     const d = this.dice ?? (s.dice ? { vals: s.dice, rolling: -1 } : null);
     if (d) {
@@ -507,5 +535,197 @@ export class BoardView {
         ctx.fillRect((x - 1) * S, (y - 14 - bob) * S, 2 * S, S);
       }
     }
+    this.drawFloats(ctx, now);
+  }
+
+  // ---------------------------------------------------------------- bangunan 3D + animasi
+
+  /** Titik jangkar (logis) tiap rumah ke-k, atau hotel bila k = -1. */
+  private buildingAnchor(i: number, k: number): [number, number] {
+    const r = tileRect(i);
+    const strip = 11;
+    if (r.side === 'bottom' || r.side === 'top') {
+      const base = r.side === 'bottom' ? r.y + strip : r.y + r.h + 2;
+      return k < 0 ? [r.x + r.w / 2, base + (r.side === 'top' ? 3 : 0)] : [r.x + 5.5 + k * 10.4, base];
+    }
+    const cx = r.side === 'left' ? r.x + r.w - strip / 2 : r.x + strip / 2;
+    return k < 0 ? [cx, r.y + r.h / 2 + 11] : [cx, r.y + 15 + k * 9];
+  }
+
+  private spawnDust(x: number, y: number, n: number, now: number, stars = false) {
+    for (let j = 0; j < n; j++) {
+      const ang = Math.PI + (j / Math.max(1, n - 1)) * Math.PI;
+      const sp = 0.012 + Math.random() * 0.02;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 6,
+        y,
+        vx: Math.cos(ang) * sp * 1.6,
+        vy: Math.sin(ang) * sp * 0.6,
+        g: 0.00002,
+        t0: now,
+        life: 450 + Math.random() * 300,
+        col: ['#d9c7a3', '#bfae8a', '#efe3c6'][j % 3],
+        size: 2 + Math.round(Math.random() * 2),
+      });
+    }
+    if (stars)
+      for (let j = 0; j < 10; j++) {
+        const ang = Math.random() * Math.PI * 2;
+        const sp = 0.02 + Math.random() * 0.03;
+        this.particles.push({
+          x,
+          y: y - 14,
+          vx: Math.cos(ang) * sp,
+          vy: Math.sin(ang) * sp - 0.02,
+          g: 0.00006,
+          t0: now + 250 + Math.random() * 300,
+          life: 700,
+          col: j % 2 ? '#f4d03f' : '#fff8e7',
+          size: 2,
+          star: true,
+        });
+      }
+  }
+
+  private drawBuildings(ctx: CanvasRenderingContext2D, now: number) {
+    const s = this.state!;
+    const items: { y: number; draw: () => void }[] = [];
+    const put = (spr: BuildingSprite, x: number, y: number, k: number) => {
+      // k: 0..1 progres muncul (1 = berdiri penuh). Efek "tumbuh" + pegas (squash & stretch).
+      if (k <= 0) return;
+      const e = k >= 1 ? 1 : easeOutBack(k);
+      const sy = Math.max(0.02, e);
+      const sx = k >= 1 ? 1 : 1 + (1 - Math.min(1, e)) * 0.5 - Math.max(0, e - 1) * 0.6;
+      items.push({
+        y,
+        draw: () => {
+          const w = spr.c.width * sx;
+          const h = spr.c.height * sy;
+          // bayangan
+          ctx.fillStyle = 'rgba(0,0,0,0.28)';
+          ctx.fillRect(x * S - (spr.c.width / 2) * sx + 2, y * S - 3, w - 2, 4);
+          ctx.drawImage(spr.c, Math.round(x * S - spr.ax * sx), Math.round(y * S - spr.ay * sy), Math.round(w), Math.round(h));
+        },
+      });
+    };
+    for (let i = 0; i < 40; i++) {
+      const t = this.theme.tiles[i];
+      if (!t.group) continue;
+      const target = s.props[i]?.houses ?? 0;
+      const shown = this.shownHouses.get(i);
+      if (shown === undefined) this.shownHouses.set(i, target);
+      else if (shown !== target) {
+        const hotelSwap = (shown === 5) !== (target === 5);
+        this.bAnims.set(i, { from: shown, to: target, t0: now, dur: hotelSwap ? 1300 : 900 + Math.abs(target - shown) * 120 });
+        this.shownHouses.set(i, target);
+        if (target === 5 || shown === 5) {
+          const [hx, hy] = this.buildingAnchor(i, -1);
+          this.spawnDust(hx, hy, 14, now, target === 5);
+        }
+      }
+      const an = this.bAnims.get(i);
+      let k = an ? (now - an.t0) / an.dur : 1;
+      if (an && k >= 1) this.bAnims.delete(i);
+      const from = an && k < 1 ? an.from : target;
+      if (!an || k >= 1) k = 1;
+      const hotelSwap = (from === 5) !== (target === 5);
+      // fase: bila berganti rumah<->hotel, yang lama runtuh dulu (35%) lalu yang baru berdiri
+      const outK = hotelSwap ? clamp01(k / 0.35) : k;
+      const inK = hotelSwap ? clamp01((k - 0.35) / 0.65) : k;
+      const drawSet = (n: number, prog: (j: number) => number) => {
+        if (n === 5) {
+          const [x, y] = this.buildingAnchor(i, -1);
+          put(building('hotel', i % 4), x, y, prog(0));
+        } else
+          for (let j = 0; j < n; j++) {
+            const [x, y] = this.buildingAnchor(i, j);
+            put(building('house', (i + j) % 4), x, y, prog(j));
+          }
+      };
+      if (hotelSwap) {
+        if (outK < 1) drawSet(from, () => 1 - outK);
+        drawSet(target, () => inK);
+      } else if (target >= from) {
+        const extra = target - from;
+        drawSet(target, (j) => {
+          if (j < from) return 1;
+          // muncul bergantian, rumah baru satu per satu
+          const st = extra > 1 ? ((j - from) / extra) * 0.45 : 0;
+          const kk = clamp01((inK - st) / (1 - (extra > 1 ? 0.45 : 0)));
+          if (kk > 0 && kk < 0.05 && !this.dusted.has(`${i}:${j}:${an?.t0}`)) {
+            this.dusted.add(`${i}:${j}:${an?.t0}`);
+            const [x, y] = this.buildingAnchor(i, j);
+            this.spawnDust(x, y, 7, now);
+          }
+          return kk;
+        });
+      } else {
+        drawSet(from, (j) => {
+          if (j < target) return 1;
+          const kk = 1 - clamp01(outK * 1.4);
+          if (kk < 0.9 && !this.dusted.has(`${i}:${j}:${an?.t0}`)) {
+            this.dusted.add(`${i}:${j}:${an?.t0}`);
+            const [x, y] = this.buildingAnchor(i, j);
+            this.spawnDust(x, y, 6, now);
+          }
+          return kk;
+        });
+      }
+    }
+    if (this.dusted.size > 200) this.dusted.clear();
+    items.sort((a, b) => a.y - b.y);
+    for (const it of items) it.draw();
+  }
+
+  private dusted = new Set<string>();
+
+  private drawParticles(ctx: CanvasRenderingContext2D, now: number) {
+    this.particles = this.particles.filter((p) => now - p.t0 < p.life);
+    for (const p of this.particles) {
+      const t = now - p.t0;
+      if (t < 0) continue;
+      const x = p.x + p.vx * t;
+      const y = p.y + p.vy * t + 0.5 * p.g * t * t;
+      ctx.globalAlpha = 1 - t / p.life;
+      ctx.fillStyle = p.col;
+      if (p.star) {
+        const tw = Math.floor(t / 90) % 2 ? 1 : 2;
+        ctx.fillRect((x - tw) * S, y * S - S / 2, tw * 2 * S, S);
+        ctx.fillRect(x * S - S / 2, (y - tw) * S, S, tw * 2 * S);
+      } else ctx.fillRect(Math.round(x * S), Math.round(y * S), p.size * S, p.size * S);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawFloats(ctx: CanvasRenderingContext2D, now: number) {
+    const DUR = 1800;
+    this.floats = this.floats.filter((f) => now - f.t0 < DUR);
+    // tumpuk bila satu pemain dapat beberapa angka sekaligus
+    const stack = new Map<string, number>();
+    for (const f of this.floats) {
+      const k = (now - f.t0) / DUR;
+      const pos = this.displayPos.get(f.pid);
+      if (pos === undefined) continue;
+      const [x, y0] = this.slotXY(f.pid, pos);
+      const n = stack.get(String(pos)) ?? 0;
+      stack.set(String(pos), n + 1);
+      const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.5 : k < 0.2 ? 1.1 - ((k - 0.12) / 0.08) * 0.1 : 1;
+      const y = y0 - 16 - n * 10 - Math.min(1, k * 1.6) * 14;
+      const up = f.delta > 0;
+      const str = (up ? '+' : '−') + formatMoney(Math.abs(f.delta));
+      ctx.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+      const size = Math.round(14 * pop);
+      ctx.font = `${size}px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const half = ctx.measureText(str).width / 2 + 6;
+      const tx = Math.max(half, Math.min(L * S - half, x * S));
+      const ty = Math.max(12, y * S);
+      ctx.fillStyle = PAL.k;
+      for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2], [2, 2]]) ctx.fillText(str, tx + dx, ty + dy);
+      ctx.fillStyle = up ? '#7dff8a' : '#ff6b5b';
+      ctx.fillText(str, tx, ty);
+    }
+    ctx.globalAlpha = 1;
   }
 }
