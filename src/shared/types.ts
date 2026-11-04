@@ -19,9 +19,12 @@ export interface Tile {
   icon?: string;
   group?: string;
   price?: number;
-  /** [dasar, 1 rumah, 2 rumah, 3 rumah, 4 rumah, hotel] */
+  /** [dasar, Rumah, Hotel, Mall, Landmark] */
   rent?: number[];
+  /** Biaya dasar bangunan; biaya tiap level = houseCost x Theme.buildCostMult[level-1] */
   houseCost?: number;
+  /** Nama landmark kota (level 4), mis. "Monas" untuk Jakarta */
+  landmark?: string;
   amount?: number;
   /** [bujur, lintang] untuk peta di tengah papan */
   geo?: [number, number];
@@ -57,11 +60,12 @@ export interface Theme {
   transportRents: number[];
   utilityMultipliers: [number, number];
   utilityScale: number;
-  bank: { houses: number; hotels: number };
   auction: { minBid: number; timeoutSec: number };
   mortgageRate: number;
   mortgageInterest: number;
   buildingSellRate: number;
+  /** Pengali houseCost untuk upgrade ke Rumah, Hotel, Mall, Landmark */
+  buildCostMult: number[];
   groups: Group[];
   tiles: Tile[];
   cards: { chance: Card[]; community: Card[] };
@@ -146,7 +150,7 @@ export interface PlayerState {
 
 export interface Ownership {
   owner: string | null;
-  /** 0-4 rumah, 5 = hotel */
+  /** Level bangunan: 0 = tanah kosong, 1 = Rumah, 2 = Hotel, 3 = Mall, 4 = Landmark */
   houses: number;
   mortgaged: boolean;
 }
@@ -199,8 +203,6 @@ export interface GameState {
   turnNo: number;
   stage: Stage;
   props: Record<number, Ownership>;
-  bankHouses: number;
-  bankHotels: number;
   /** Urutan id kartu; rahasia, tidak dikirim ke klien. */
   decks: { chance: string[]; community: string[] };
   dice: [number, number] | null;
@@ -209,6 +211,8 @@ export interface GameState {
   pendingBuy: number | null;
   /** Petak milik lawan yang boleh diambil alih pemain giliran ini (setelah bayar sewa). */
   pendingTakeover?: number | null;
+  /** Pemain giliran ini sudah upgrade di petak tempat ia berhenti sekarang. */
+  upgradeUsed?: boolean;
   debts: Debt[];
   resume: Resume;
   auction: Auction | null;

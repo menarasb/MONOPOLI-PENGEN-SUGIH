@@ -1,7 +1,7 @@
 import '@fontsource/press-start-2p/400.css';
 import './style.css';
 import { io, type Socket } from 'socket.io-client';
-import { Engine, shuffle, type PublicGameState } from '../shared/engine';
+import { Engine, LEVEL_NAMES, MAX_LEVEL, shuffle, type PublicGameState } from '../shared/engine';
 import { formatMoney as fmt } from '../shared/format';
 import { REACTIONS, type ChatMessage, type ClientToServer, type JoinResult, type PublicRoom, type ServerToClient } from '../shared/protocol';
 import { CHARACTER_DISCLAIMER, CHARACTERS, THEMES } from '../shared/theme';
@@ -32,6 +32,8 @@ const app = {
   screen: '' as '' | 'home' | 'lobby' | 'game',
   bidDraft: '',
   shownGameOver: false,
+  /** Persinggahan terakhir yang sudah ditawari pop-up upgrade (turnNo:posisi:dadu). */
+  upgradePrompted: '',
   unreadChat: 0,
   seenTrades: new Set<number>(),
 };
@@ -251,7 +253,9 @@ function showRules() {
   <ul class="rules">
     <li>Lempar 2 dadu dan maju. Kembar = lempar lagi; kembar 3× = masuk penjara.</li>
     <li>Berhenti di properti kosong: beli, atau properti dilelang ke semua pemain (mulai 10, 15 detik setelah tawaran terakhir).</li>
-    <li>Punya satu grup warna lengkap: sewa tanah kosong 2×, dan boleh bangun rumah merata (maks. 4 rumah lalu hotel).</li>
+    <li>Punya satu grup warna lengkap: sewa tanah kosong 2×.</li>
+    <li>Upgrade bangunan hanya saat pionmu berhenti di kotamu sendiri, satu level tiap singgah: Rumah → Hotel → Mall → Landmark.</li>
+    <li>Kota ber-Landmark tidak bisa diambil alih lawan, tapi pemiliknya tetap bisa menjual bangunannya saat butuh uang.</li>
     <li>Gadai = dapat 50% harga. Tebus = nilai gadai + bunga 10%. Properti tergadai tidak menarik sewa.</li>
     <li>Penjara: bayar ${fmt(theme.jailFine)}, pakai kartu Bebas, atau lempar kembar (maks. 3 giliran).</li>
     <li>Tidak sanggup bayar: jual bangunan / gadai dulu. Masih kurang = bangkrut.</li>
@@ -653,6 +657,7 @@ function updateGame(events: GameEvent[], _prev: PublicRoom | null) {
   renderActions();
   renderLog();
   notifyTrades();
+  board.after(promptUpgrade);
   if (g.stage === 'gameover' && !app.shownGameOver) {
     app.shownGameOver = true;
     const wait = () => (board?.busy ? setTimeout(wait, 300) : showGameOver());
@@ -787,7 +792,7 @@ function renderPlayers() {
           const grp = theme.groups.find((x) => x.id === tile.group);
           const o = g.props[t];
           const col = grp?.color ?? (tile.type === 'transport' ? '#444' : '#999');
-          return `<span class="chip ${o.mortgaged ? 'mort' : ''}" style="background:${col}" title="${esc(tile.name)}${o.houses ? ` (${o.houses === 5 ? 'hotel' : o.houses + ' rumah'})` : ''}${o.mortgaged ? ' — tergadai' : ''}">${o.houses === 5 ? 'H' : o.houses || ''}</span>`;
+          return `<span class="chip ${o.mortgaged ? 'mort' : ''}" style="background:${col}" title="${esc(tile.name)}${o.houses ? ` (${LEVEL_NAMES[o.houses]})` : ''}${o.mortgaged ? ' — tergadai' : ''}">${o.houses ? LEVEL_NAMES[o.houses][0] : ''}</span>`;
         })
         .join('');
       return `<div class="pcard ${p.id === cur.id && g.stage !== 'gameover' ? 'turn' : ''} ${p.bankrupt ? 'dead' : ''}" data-pid="${p.id}" style="--pc:${PLAYER_COLORS[i % 4]}">
@@ -834,6 +839,57 @@ function tileTitle(i: number) {
   return `<div class="tile-title" style="--gc:${grp?.color ?? '#5b6770'}"><span class="gl">${grp?.letter ?? ''}</span>${esc(t.name)}</div>`;
 }
 
+/** Tombol upgrade bila pemain sedang berhenti di kotanya sendiri (hanya di sana boleh upgrade). */
+function upgradeBox(pid: string): string {
+  const s = asState();
+  const p = s.players.find((x) => x.id === pid);
+  if (!p || s.dice === null) return '';
+  const i = p.position;
+  const t = theme.tiles[i];
+  const o = s.props[i];
+  if (t.type !== 'city' || !o || o.owner !== pid) return '';
+  if (o.houses >= MAX_LEVEL)
+    return `<p class="ok small">🏛 ${esc(t.name)} sudah ber-Landmark ${esc(t.landmark ?? '')}. Aman dari ambil alih!</p>`;
+  const err = engine.canBuild(s, pid, i);
+  if (err === 'Sudah upgrade di persinggahan ini') return `<p class="small muted">Sudah upgrade ${esc(t.name)} kali ini. Singgah lagi untuk level berikutnya.</p>`;
+  const next = o.houses + 1;
+  const label = next === MAX_LEVEL ? `🏛 Bangun Landmark ${t.landmark ?? ''}` : `🏗 Upgrade ke ${LEVEL_NAMES[next]}`;
+  return `<p class="small">Kamu berhenti di kotamu sendiri. Sewa ${LEVEL_NAMES[next]}: <b>${fmt(t.rent![next])}</b>.</p>
+    <div class="btns"><button class="btn big" data-build="${i}" ${err ? `disabled title="${esc(err)}"` : ''}>${esc(label)} ${fmt(engine.levelCost(i, next))}</button></div>`;
+}
+
+/** Pop-up "Bangun Rumah?" begitu pion berhenti di kota milik sendiri (sekali per persinggahan). */
+function promptUpgrade() {
+  const g = app.room?.game;
+  const me = meP();
+  if (!g || !me || me.bankrupt || g.dice === null) return;
+  if (g.players[g.turnIndex].id !== me.id || (g.stage !== 'end' && g.stage !== 'roll')) return;
+  const i = me.position;
+  const t = theme.tiles[i];
+  const o = g.props[i];
+  if (t.type !== 'city' || !o || o.owner !== me.id || o.houses >= MAX_LEVEL) return;
+  const key = `${g.turnNo}:${i}:${g.dice.join('')}`;
+  if (app.upgradePrompted === key) return;
+  const err = engine.canBuild(asState(), me.id, i);
+  if (err && err !== 'Uang tidak cukup') return;
+  if ($('#modal').classList.contains('open')) return;
+  app.upgradePrompted = key;
+  const next = o.houses + 1;
+  const cost = engine.levelCost(i, next);
+  const what = next === MAX_LEVEL ? `Landmark ${t.landmark ?? ''}` : LEVEL_NAMES[next];
+  const m = openModal(`${tileTitle(i)}<p>Kamu berhenti di kotamu sendiri! Bangun <b>${esc(what)}</b> seharga <b>${fmt(cost)}</b>?</p>
+    <p class="small">Sewa naik dari ${fmt(engine.rentFor(asState(), i, 7))} jadi <b>${fmt(t.rent![next])}</b>.${next === MAX_LEVEL ? ' Landmark tidak bisa diambil alih lawan.' : ''}</p>
+    ${err ? `<p class="bad">Uang kurang ${fmt(cost - me.money)}.</p>` : ''}
+    <div class="btns"><button class="btn big primary" data-up="yes" ${err ? 'disabled' : ''}>${next === MAX_LEVEL ? '🏛' : '🏗'} Bangun ${esc(LEVEL_NAMES[next])}</button><button class="btn big" data-up="no">Nanti</button></div>`);
+  m.querySelectorAll<HTMLButtonElement>('[data-up]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        closeModal();
+        if (b.dataset.up === 'yes') void act({ type: 'build', tile: i });
+      }),
+  );
+}
+
 function renderActions() {
   const g = game();
   const me = meP();
@@ -850,7 +906,7 @@ function renderActions() {
     switch (g.stage) {
       case 'roll':
         if (myTurn) {
-          html = `<p class="prompt">Giliranmu!${me.inJail ? ` Kamu di penjara (percobaan ${me.jailTurns + 1}/${theme.maxJailTurns}).` : ''}</p>
+          html = `<p class="prompt">Giliranmu!${me.inJail ? ` Kamu di penjara (percobaan ${me.jailTurns + 1}/${theme.maxJailTurns}).` : ''}</p>${upgradeBox(me.id)}
           <div class="btns">${btn('roll', `🎲 ${me.inJail ? 'Coba Kembar' : T.roll}`, 'primary')}
           ${me.inJail ? btn('payJail', `${T.payJail} ${fmt(theme.jailFine)}`, '', me.money < theme.jailFine) : ''}
           ${me.inJail && me.jailFreeCards.length ? btn('useJailCard', T.useCard) : ''}</div>`;
@@ -872,7 +928,7 @@ function renderActions() {
         const o = g.props[i];
         const price = engine.takeoverPrice(asState(), i);
         const owner = pname(o.owner);
-        const bld = o.houses === 5 ? ' + hotel' : o.houses > 0 ? ` + ${o.houses} rumah` : '';
+        const bld = o.houses > 0 ? ` + ${LEVEL_NAMES[o.houses]}` : '';
         if (myTurn) {
           const free = me.money - engine.debtOf(asState(), me.id);
           html = `${tileTitle(i)}<p>Ambil alih dari <b>${esc(owner)}</b>${bld}? Bayar <b>${fmt(price)}</b> (2x harga) ke ${esc(owner)}. Uangmu ${fmt(me.money)}.</p>
@@ -914,7 +970,7 @@ function renderActions() {
         break;
       }
       case 'end':
-        if (myTurn) html = `<p class="prompt">Bangun, gadai, atau tukar sekarang. Kalau sudah, akhiri giliran.</p><div class="btns">${btn('endTurn', T.endTurn, 'primary')}</div>`;
+        if (myTurn) html = `<p class="prompt">Gadai atau tukar sekarang. Kalau sudah, akhiri giliran.</p>${upgradeBox(me.id)}<div class="btns">${btn('endTurn', T.endTurn, 'primary')}</div>`;
         else html = `<p class="prompt"><b>${esc(cur.name)}</b> sedang mengatur strategi…</p>`;
         break;
       case 'gameover':
@@ -953,6 +1009,7 @@ function renderActions() {
       act({ type: a } as Action);
     };
   });
+  el.querySelectorAll<HTMLButtonElement>('[data-build]').forEach((b) => (b.onclick = () => act({ type: 'build', tile: Number(b.dataset.build) })));
   el.querySelectorAll<HTMLButtonElement>('[data-bid]').forEach((b) => (b.onclick = () => act({ type: 'bid', amount: Number(b.dataset.bid) })));
   el.querySelectorAll<HTMLButtonElement>('[data-trade]').forEach((b) => (b.onclick = () => showTrade(Number(b.dataset.trade))));
   el.querySelectorAll<HTMLButtonElement>('[data-tile]').forEach((b) => (b.onclick = () => showTile(Number(b.dataset.tile))));
@@ -986,9 +1043,12 @@ function rentTable(i: number) {
   const t = theme.tiles[i];
   if (t.type === 'city') {
     const r = t.rent!;
-    const rows = [['Sewa dasar', r[0]], ['Grup lengkap', r[0] * 2], ['1 rumah', r[1]], ['2 rumah', r[2]], ['3 rumah', r[3]], ['4 rumah', r[4]], ['Hotel', r[5]]];
-    return `<table class="rent">${rows.map(([l, v]) => `<tr><td>${l}</td><td>${fmt(v as number)}</td></tr>`).join('')}
-      <tr><td>Biaya rumah/hotel</td><td>${fmt(t.houseCost!)}</td></tr><tr><td>Nilai gadai</td><td>${fmt(engine.mortgageValue(i))}</td></tr></table>`;
+    const rows = [['Sewa dasar', r[0], ''], ['Grup lengkap', r[0] * 2, '']];
+    for (let k = 1; k <= MAX_LEVEL; k++)
+      rows.push([k === MAX_LEVEL ? `Landmark${t.landmark ? ` (${esc(t.landmark)})` : ''}` : LEVEL_NAMES[k], r[k], fmt(engine.levelCost(i, k))]);
+    return `<table class="rent"><tr class="muted small"><td></td><td>Sewa</td><td>Biaya bangun</td></tr>${rows.map(([l, v, c]) => `<tr><td>${l}</td><td>${fmt(v as number)}</td><td>${c}</td></tr>`).join('')}
+      <tr><td>Nilai gadai</td><td>${fmt(engine.mortgageValue(i))}</td><td></td></tr></table>
+      <p class="small muted">Upgrade hanya saat berhenti di kota ini. Landmark tidak bisa diambil alih.</p>`;
   }
   if (t.type === 'transport')
     return `<table class="rent">${theme.transportRents.map((v, k) => `<tr><td>Punya ${k + 1} transportasi</td><td>${fmt(v)}</td></tr>`).join('')}<tr><td>Nilai gadai</td><td>${fmt(engine.mortgageValue(i))}</td></tr></table>`;
@@ -1011,7 +1071,7 @@ function showTile(i: number) {
   board.highlight = i;
   const t = theme.tiles[i];
   const o = app.room?.game?.props[i];
-  const ownerTxt = o ? (o.owner ? `Milik <b style="color:${colorOf(o.owner)}">${esc(pname(o.owner))}</b>${o.mortgaged ? ' (tergadai)' : ''}${o.houses ? ` · ${o.houses === 5 ? 'hotel' : o.houses + ' rumah'}` : ''}` : 'Belum ada pemilik') : '';
+  const ownerTxt = o ? (o.owner ? `Milik <b style="color:${colorOf(o.owner)}">${esc(pname(o.owner))}</b>${o.mortgaged ? ' (tergadai)' : ''}${o.houses ? ` · ${LEVEL_NAMES[o.houses]}` : ''}` : 'Belum ada pemilik') : '';
   openModal(`${tileTitle(i)}${t.price ? `<p>Harga ${fmt(t.price)}</p>` : ''}${rentTable(i)}<p>${ownerTxt}</p>`, {
     onClose: () => board && (board.highlight = null),
   });
@@ -1023,7 +1083,7 @@ function showPlayer(pid: string) {
   const tiles = engine.ownedTiles(asState(), pid).sort((a, b) => a - b);
   openModal(`<div class="pdetail">${avatarImg(p.character.parts, p.expression)}<div><h2>${esc(p.name)}</h2><p class="muted">${esc(p.character.name)}</p>
     <p>Uang ${fmt(p.money)} · Total aset ${fmt(engine.netWorth(asState(), pid))}</p></div></div>
-    <ul class="plist">${tiles.map((i) => `<li>${tileTitle(i)} <span class="small">${g.props[i].mortgaged ? 'tergadai' : g.props[i].houses === 5 ? 'hotel' : g.props[i].houses ? g.props[i].houses + ' rumah' : ''}</span></li>`).join('') || '<li class="muted">Belum punya properti</li>'}</ul>`);
+    <ul class="plist">${tiles.map((i) => `<li>${tileTitle(i)} <span class="small">${g.props[i].mortgaged ? 'tergadai' : g.props[i].houses ? LEVEL_NAMES[g.props[i].houses] : ''}</span></li>`).join('') || '<li class="muted">Belum punya properti</li>'}</ul>`);
 }
 
 function showManage() {
@@ -1040,11 +1100,12 @@ function showManage() {
           const t = theme.tiles[i];
           const o = s.props[i];
           const can = (r: string | null) => (r ? `disabled title="${esc(r)}"` : '');
-          const status = o.mortgaged ? 'Tergadai' : o.houses === 5 ? 'Hotel' : o.houses ? `${o.houses} rumah` : 'Tanah kosong';
+          const status = o.mortgaged ? 'Tergadai' : t.type === 'city' ? LEVEL_NAMES[o.houses] + (o.houses === MAX_LEVEL ? ' 🏛' : '') : '';
           let buttons = '';
           if (t.type === 'city' && !o.mortgaged) {
-            buttons += `<button class="btn sm" data-m="build" data-i="${i}" ${can(engine.canBuild(s, me.id, i))}>+${o.houses === 4 ? 'Hotel' : 'Rumah'} ${fmt(t.houseCost!)}</button>`;
-            if (o.houses) buttons += `<button class="btn sm" data-m="sell" data-i="${i}" ${can(engine.canSell(s, me.id, i))}>Jual +${fmt(engine.buildingSellValue(i))}</button>`;
+            if (o.houses < MAX_LEVEL)
+              buttons += `<button class="btn sm" data-m="build" data-i="${i}" ${can(engine.canBuild(s, me.id, i))}>+${LEVEL_NAMES[o.houses + 1]} ${fmt(engine.levelCost(i, o.houses + 1))}</button>`;
+            if (o.houses) buttons += `<button class="btn sm" data-m="sell" data-i="${i}" ${can(engine.canSell(s, me.id, i))}>Jual ${LEVEL_NAMES[o.houses]} +${fmt(engine.buildingSellValue(s, i))}</button>`;
           }
           if (!o.mortgaged) buttons += `<button class="btn sm" data-m="mortgage" data-i="${i}" ${can(engine.canMortgage(s, me.id, i))}>Gadai +${fmt(engine.mortgageValue(i))}</button>`;
           else buttons += `<button class="btn sm" data-m="unmortgage" data-i="${i}" ${me.money < engine.unmortgageCost(i) ? 'disabled' : ''}>Tebus ${fmt(engine.unmortgageCost(i))}</button>`;
@@ -1052,7 +1113,7 @@ function showManage() {
         })
         .join('') || '<p class="muted">Kamu belum punya properti.</p>';
     $('#manage-money').textContent = fmt(game().players.find((p) => p.id === me.id)!.money);
-    $('#manage-stock').textContent = `Stok bank: ${game().bankHouses} rumah, ${game().bankHotels} hotel`;
+    $('#manage-stock').textContent = 'Upgrade hanya saat berhenti di kotamu sendiri.';
     box.querySelectorAll<HTMLButtonElement>('[data-m]').forEach(
       (b) => (b.onclick = async () => {
         await act({ type: b.dataset.m, tile: Number(b.dataset.i) } as Action);
@@ -1112,7 +1173,7 @@ function showTradeComposer() {
   const tradable = (pid: string) =>
     engine.ownedTiles(asState(), pid).filter((i) => {
       const t = theme.tiles[i];
-      return !(t.type === 'city' && engine.groupTiles(t.group!).some((x) => g.props[x].houses > 0));
+      return !(t.type === 'city' && g.props[i].houses > 0);
     });
   const side = (pid: string, key: string) => {
     const p = g.players.find((x) => x.id === pid)!;

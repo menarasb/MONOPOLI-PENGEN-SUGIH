@@ -20,6 +20,11 @@ import { formatMoney as fmt } from './format.js';
 
 const BOARD = 40;
 
+/** Nama level bangunan kota: indeks = Ownership.houses. */
+export const LEVEL_NAMES = ['Tanah kosong', 'Rumah', 'Hotel', 'Mall', 'Landmark'] as const;
+/** Level tertinggi (Landmark). */
+export const MAX_LEVEL = 4;
+
 export interface NewPlayer {
   id: string;
   name: string;
@@ -81,8 +86,6 @@ export class Engine {
       turnNo: 1,
       stage: 'roll',
       props: {},
-      bankHouses: this.theme.bank.houses,
-      bankHotels: this.theme.bank.hotels,
       decks: {
         chance: shuffle(this.theme.cards.chance.map((c) => c.id), ctx.rng),
         community: shuffle(this.theme.cards.community.map((c) => c.id), ctx.rng),
@@ -92,6 +95,7 @@ export class Engine {
       rollAgain: false,
       pendingBuy: null,
       pendingTakeover: null,
+      upgradeUsed: false,
       debts: [],
       resume: null,
       auction: null,
@@ -186,8 +190,30 @@ export class Engine {
     return Math.round(this.mortgageValue(i) * (1 + this.theme.mortgageInterest));
   }
 
-  buildingSellValue(i: number): number {
-    return Math.floor((this.tile(i).houseCost ?? 0) * this.theme.buildingSellRate);
+  /** Biaya membangun level `lvl` (1 = Rumah ... 4 = Landmark) di kota i. */
+  levelCost(i: number, lvl: number): number {
+    return (this.tile(i).houseCost ?? 0) * (this.theme.buildCostMult[lvl - 1] ?? 0);
+  }
+
+  /** Total biaya semua bangunan sampai level `lvl`. */
+  buildingsCost(i: number, lvl: number): number {
+    let v = 0;
+    for (let k = 1; k <= lvl; k++) v += this.levelCost(i, k);
+    return v;
+  }
+
+  /** Uang yang diterima saat menjual bangunan teratas di kota i (turun satu level). */
+  buildingSellValue(s: GameState, i: number): number {
+    const lvl = s.props[i]?.houses ?? 0;
+    return lvl > 0 ? Math.floor(this.levelCost(i, lvl) * this.theme.buildingSellRate) : 0;
+  }
+
+  /** Uang dari menjual semua bangunan di kota i. */
+  private sellAllValue(s: GameState, i: number): number {
+    const lvl = s.props[i]?.houses ?? 0;
+    let v = 0;
+    for (let k = 1; k <= lvl; k++) v += Math.floor(this.levelCost(i, k) * this.theme.buildingSellRate);
+    return v;
   }
 
   /** Sewa yang ditagih ketika `payer` berhenti di petak i. */
@@ -197,7 +223,7 @@ export class Engine {
     if (!o || !o.owner || o.mortgaged) return 0;
     if (t.type === 'city') {
       if (o.houses === 0) return t.rent![0] * (this.ownsGroup(s, o.owner, t.group!) ? 2 : 1);
-      return t.rent![o.houses];
+      return t.rent![Math.min(o.houses, MAX_LEVEL)];
     }
     if (t.type === 'transport') {
       const n = this.countOwned(s, o.owner, 'transport');
@@ -218,7 +244,7 @@ export class Engine {
   takeoverPrice(s: GameState, i: number): number {
     const t = this.tile(i);
     const o = s.props[i];
-    const buildings = t.type === 'city' ? (t.houseCost ?? 0) * (o?.houses ?? 0) : 0;
+    const buildings = t.type === 'city' ? this.buildingsCost(i, o?.houses ?? 0) : 0;
     return ((t.price ?? 0) + buildings) * Engine.TAKEOVER_MULT;
   }
 
@@ -228,6 +254,7 @@ export class Engine {
     if (!o || !o.owner) return 'Properti belum dimiliki siapa pun';
     if (o.owner === pid) return 'Sudah propertimu';
     if (o.mortgaged) return 'Properti tergadai tidak bisa diambil alih';
+    if (o.houses >= MAX_LEVEL) return 'Landmark tidak bisa diambil alih';
     if (this.player(s, o.owner).bankrupt) return 'Pemilik sudah bangkrut';
     return null;
   }
@@ -238,7 +265,7 @@ export class Engine {
     let v = p.money;
     for (const i of this.ownedTiles(s, id)) {
       const o = s.props[i];
-      if (this.tile(i).type === 'city') v += this.buildingSellValue(i) * (o.houses === 5 ? 5 : o.houses);
+      if (this.tile(i).type === 'city') v += this.sellAllValue(s, i);
       if (!o.mortgaged) v += this.mortgageValue(i);
     }
     return v;
@@ -252,7 +279,7 @@ export class Engine {
       const t = this.tile(i);
       const o = s.props[i];
       v += o.mortgaged ? Math.round((t.price ?? 0) * 0.5) : t.price ?? 0;
-      if (t.type === 'city') v += (t.houseCost ?? 0) * o.houses;
+      if (t.type === 'city') v += this.buildingsCost(i, o.houses);
     }
     return v;
   }
@@ -355,7 +382,7 @@ export class Engine {
         s.pendingTakeover = null;
         // Tawaran tukar yang memuat properti ini jadi tidak berlaku.
         s.trades = s.trades.filter((t) => !t.give.tiles.includes(i) && !t.get.tiles.includes(i));
-        const b = o.houses === 5 ? ' beserta hotelnya' : o.houses > 0 ? ` beserta ${o.houses} rumahnya` : '';
+        const b = o.houses > 0 ? ` beserta ${LEVEL_NAMES[o.houses]}-nya` : '';
         this.log(s, `${p.name} MENGAMBIL ALIH ${this.tile(i).name}${b} dari ${owner.name} seharga ${fmt(price)}!`);
         ev.push({ t: 'sfx', name: 'buy' }, { t: 'toast', text: `${p.name} ambil alih ${this.tile(i).name}!` });
         return this.settle(s, ctx, ev);
@@ -527,6 +554,7 @@ export class Engine {
     s.dice = null;
     s.pendingBuy = null;
     s.pendingTakeover = null;
+    s.upgradeUsed = false;
     if (this.alive(s).length <= 1) return this.endGame(s, 'last');
     if (s.endsAt !== null && ctx.now >= s.endsAt) return this.endGame(s, 'time');
     let i = s.turnIndex;
@@ -582,6 +610,7 @@ export class Engine {
     const from = p.position;
     const to = (((from + steps) % BOARD) + BOARD) % BOARD;
     p.position = to;
+    s.upgradeUsed = false;
     ev.push({ t: 'move', player: p.id, from, to, steps, direct: false });
     if (steps > 0 && from + steps >= BOARD) this.passGo(s, p, to === 0, ev);
   }
@@ -591,6 +620,7 @@ export class Engine {
     const from = p.position;
     const steps = (target - from + BOARD) % BOARD || BOARD;
     p.position = target;
+    s.upgradeUsed = false;
     ev.push({ t: 'move', player: p.id, from, to: target, steps, direct: false });
     if (from + steps >= BOARD) this.passGo(s, p, target === 0, ev);
   }
@@ -607,6 +637,7 @@ export class Engine {
   private sendToJail(s: GameState, p: PlayerState, ev: GameEvent[]) {
     const from = p.position;
     p.position = this.theme.jailIndex;
+    s.upgradeUsed = false;
     p.inJail = true;
     p.jailTurns = 0;
     p.expression = 'kaget';
@@ -739,12 +770,12 @@ export class Engine {
         let hotels = 0;
         for (const i of this.ownedTiles(s, p.id)) {
           const h = s.props[i].houses;
-          if (h === 5) hotels++;
-          else houses += h;
+          if (h >= 2) hotels++;
+          else if (h === 1) houses++;
         }
         const total = houses * perHouse + hotels * perHotel;
         if (total > 0) {
-          this.log(s, `${p.name} bayar perbaikan ${houses} rumah & ${hotels} hotel: ${fmt(total)}.`);
+          this.log(s, `${p.name} bayar perbaikan ${houses} rumah & ${hotels} hotel/mall/landmark: ${fmt(total)}.`);
           this.charge(s, p.id, s.settings.freeParkingJackpot ? 'pot' : 'bank', total, 'Perbaikan');
         }
         return;
@@ -796,9 +827,7 @@ export class Engine {
     for (const i of this.ownedTiles(s, p.id)) {
       const o = s.props[i];
       if (o.houses > 0) {
-        p.money += this.buildingSellValue(i) * o.houses;
-        if (o.houses === 5) s.bankHotels += 1;
-        else s.bankHouses += o.houses;
+        p.money += this.sellAllValue(s, i);
         o.houses = 0;
       }
     }
@@ -882,30 +911,32 @@ export class Engine {
     if (s.stage === 'auction') fail('Tunggu lelang selesai');
   }
 
+  /**
+   * Upgrade bangunan hanya boleh saat pion pemain sedang berhenti di kota miliknya sendiri
+   * pada gilirannya, satu level per persinggahan: Rumah -> Hotel -> Mall -> Landmark.
+   */
   canBuild(s: GameState, pid: string, i: number): string | null {
     const t = this.tile(i);
     const o = s.props[i];
     if (t.type !== 'city') return 'Hanya kota yang bisa dibangun';
     if (o.owner !== pid) return 'Bukan propertimu';
-    if (!this.ownsGroup(s, pid, t.group!)) return 'Harus punya satu grup warna lengkap';
-    const g = this.groupTiles(t.group!);
-    if (g.some((x) => s.props[x].mortgaged)) return 'Ada properti tergadai di grup ini';
-    if (o.houses >= 5) return 'Sudah ada hotel';
-    if (o.houses > Math.min(...g.map((x) => s.props[x].houses))) return 'Bangun merata dulu di grup ini';
-    if (o.houses === 4 && s.bankHotels <= 0) return 'Stok hotel bank habis';
-    if (o.houses < 4 && s.bankHouses <= 0) return 'Stok rumah bank habis';
-    if (this.player(s, pid).money < t.houseCost!) return 'Uang tidak cukup';
+    if (o.mortgaged) return 'Properti sedang tergadai';
+    if (o.houses >= MAX_LEVEL) return 'Sudah Landmark (level tertinggi)';
+    const p = this.player(s, pid);
+    if (this.current(s).id !== pid) return 'Upgrade hanya di giliranmu';
+    if (p.position !== i) return 'Upgrade hanya saat kamu berhenti di kota ini';
+    if ((s.stage !== 'end' && s.stage !== 'roll') || s.dice === null) return 'Upgrade setelah pionmu berhenti di kota ini';
+    if (s.upgradeUsed) return 'Sudah upgrade di persinggahan ini';
+    if (p.money - this.debtOf(s, pid) < this.levelCost(i, o.houses + 1)) return 'Uang tidak cukup';
     return null;
   }
 
+  /** Jual bangunan teratas (turun satu level). Landmark pun boleh dijual pemiliknya. */
   canSell(s: GameState, pid: string, i: number): string | null {
     const t = this.tile(i);
     const o = s.props[i];
     if (t.type !== 'city' || o.owner !== pid) return 'Bukan propertimu';
     if (o.houses === 0) return 'Tidak ada bangunan';
-    const g = this.groupTiles(t.group!);
-    if (o.houses < Math.max(...g.map((x) => s.props[x].houses))) return 'Jual merata dulu di grup ini';
-    if (o.houses === 5 && s.bankHouses < 4) return 'Stok rumah bank kurang untuk memecah hotel';
     return null;
   }
 
@@ -915,14 +946,16 @@ export class Engine {
     if (err) fail(err);
     const t = this.tile(i);
     const o = s.props[i];
-    p.money -= t.houseCost!;
-    if (o.houses === 4) {
-      s.bankHotels -= 1;
-      s.bankHouses += 4;
-    } else s.bankHouses -= 1;
+    const cost = this.levelCost(i, o.houses + 1);
+    p.money -= cost;
     o.houses += 1;
-    this.log(s, `${p.name} membangun ${o.houses === 5 ? 'hotel' : 'rumah'} di ${t.name}.`);
+    s.upgradeUsed = true;
+    p.expression = 'senang';
     ev.push({ t: 'sfx', name: 'build' });
+    if (o.houses === MAX_LEVEL) {
+      this.log(s, `${p.name} membangun LANDMARK ${t.landmark ?? t.name} di ${t.name} (${fmt(cost)})! Kota ini tidak bisa diambil alih.`);
+      ev.push({ t: 'toast', text: `🏛 Landmark ${t.landmark ?? t.name} berdiri di ${t.name}!` });
+    } else this.log(s, `${p.name} membangun ${LEVEL_NAMES[o.houses]} di ${t.name} (${fmt(cost)}).`);
   }
 
   private sellBuilding(s: GameState, p: PlayerState, i: number, ev: GameEvent[]) {
@@ -930,13 +963,11 @@ export class Engine {
     const err = this.canSell(s, p.id, i);
     if (err) fail(err);
     const o = s.props[i];
-    if (o.houses === 5) {
-      s.bankHotels += 1;
-      s.bankHouses -= 4;
-    } else s.bankHouses += 1;
+    const value = this.buildingSellValue(s, i);
+    const name = LEVEL_NAMES[o.houses];
     o.houses -= 1;
-    p.money += this.buildingSellValue(i);
-    this.log(s, `${p.name} menjual bangunan di ${this.tile(i).name} (+${fmt(this.buildingSellValue(i))}).`);
+    p.money += value;
+    this.log(s, `${p.name} menjual ${name} di ${this.tile(i).name} (+${fmt(value)}).`);
     ev.push({ t: 'sfx', name: 'coin' });
   }
 
@@ -945,8 +976,7 @@ export class Engine {
     if (!o || o.owner !== pid) return 'Bukan propertimu';
     if (o.mortgaged) return 'Sudah digadaikan';
     const t = this.tile(i);
-    if (t.type === 'city' && this.groupTiles(t.group!).some((x) => s.props[x].houses > 0))
-      return 'Jual semua bangunan di grup ini dulu';
+    if (t.type === 'city' && s.props[i].houses > 0) return 'Jual semua bangunan di kota ini dulu';
     return null;
   }
 
@@ -983,8 +1013,7 @@ export class Engine {
     for (const i of o.tiles) {
       if (!s.props[i] || s.props[i].owner !== pid) fail(`${this.tile(i)?.name ?? i} bukan milik ${p.name}`);
       const t = this.tile(i);
-      if (t.type === 'city' && this.groupTiles(t.group!).some((x) => s.props[x].houses > 0))
-        fail(`Jual bangunan di grup ${t.name} dulu sebelum ditukar`);
+      if (t.type === 'city' && s.props[i].houses > 0) fail(`Jual bangunan di ${t.name} dulu sebelum ditukar`);
     }
   }
 

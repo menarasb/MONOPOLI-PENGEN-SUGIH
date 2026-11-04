@@ -413,7 +413,7 @@ const onX = (X: number, y0: number, y1: number, z0: number, z1: number, col: str
   col,
 });
 
-export function building(kind: 'house' | 'hotel', variant = 0): BuildingSprite {
+export function building(kind: 'house' | 'hotel' | 'mall', variant = 0): BuildingSprite {
   const key = kind + variant;
   const hit = bCache.get(key);
   if (hit) return hit;
@@ -446,6 +446,48 @@ export function building(kind: 'house' | 'hotel', variant = 0): BuildingSprite {
       { pts: [[-1, m, h + r], [a + 1, m, h + r], [a + 1, m + 1, h + r - 1.6], [-1, m + 1, h + r - 1.6]], col: shiftColor(roof, 45) },
       { pts: [[-1, b, h - 0.2], [a + 1, b, h - 0.2], [a + 1, b + 1, h - 1], [-1, b + 1, h - 1]], col: shiftColor(roof, -35) },
     ]);
+  } else if (kind === 'mall') {
+    // Mall: bangunan lebar & pendek, fasad kaca, kanopi bergaris, papan nama di atap.
+    const a = 22, b = 16, h = 15;
+    const wallL = '#f0ece2';
+    const wallR = '#b9b2a2';
+    const accent = ['#16a085', '#8e44ad', '#d35400', '#2980b9'][variant % 4];
+    const faces: Face[] = [
+      onY(b, 0, a, 0, h, wallL),
+      onX(a, 0, b, 0, h, wallR),
+      // pita warna di atas
+      onY(b, 0, a, h - 3, h, accent),
+      onX(a, 0, b, h - 3, h, shiftColor(accent, -40)),
+      // etalase kaca lantai 1 & 2
+      onY(b, 1.5, a - 1.5, 1, 5.5, '#7fc6e8'),
+      onY(b, 1.5, a - 1.5, 7, 10.5, '#5aa0c4'),
+      onX(a, 1.5, b - 1.5, 1, 5.5, '#5aa0c4'),
+      onX(a, 1.5, b - 1.5, 7, 10.5, '#3f7fa3'),
+      // pintu putar
+      onY(b, a / 2 - 2, a / 2 + 2, 0, 5.5, '#2a3f52'),
+    ];
+    // tiang kaca vertikal
+    for (let x = 5; x < a - 2; x += 4) faces.push(onY(b, x, x + 0.6, 1, 10.5, '#e8f6fc'));
+    for (let y = 5; y < b - 2; y += 4) faces.push(onX(a, y, y + 0.6, 1, 10.5, '#b4d8e8'));
+    // kanopi bergaris di atas pintu
+    for (let k = 0; k < 4; k++)
+      faces.push({
+        pts: [[a / 2 - 4 + k * 2, b, 6.5], [a / 2 - 2 + k * 2, b, 6.5], [a / 2 - 2 + k * 2, b + 2.5, 5.5], [a / 2 - 4 + k * 2, b + 2.5, 5.5]],
+        col: k % 2 ? '#fff8e7' : '#c0392b',
+      });
+    faces.push(
+      // atap datar
+      { pts: [[0, 0, h], [a, 0, h], [a, b, h], [0, b, h]], col: '#d8d2c4' },
+      { pts: [[1.5, 1.5, h], [a - 1.5, 1.5, h], [a - 1.5, b - 1.5, h], [1.5, b - 1.5, h]], col: '#9c9483' },
+      // papan nama "M"
+      onX(a / 2 + 1, 5, 11, h, h + 7, shiftColor(accent, -40)),
+      onY(a / 2, a / 2 - 4, a / 2 + 4, h, h + 7, accent),
+      onY(a / 2, a / 2 - 3, a / 2 - 1.8, h + 1.2, h + 5.8, '#fff8e7'),
+      onY(a / 2, a / 2 + 1.8, a / 2 + 3, h + 1.2, h + 5.8, '#fff8e7'),
+      onY(a / 2, a / 2 - 1.8, a / 2 + 1.8, h + 3.8, h + 5.8, '#fff8e7'),
+      onY(a / 2, a / 2 - 0.6, a / 2 + 0.6, h + 2.4, h + 4.6, '#fff8e7'),
+    );
+    spr = rasterIso(a, b, h + 9, faces);
   } else {
     const a = 16, b = 16, h = 26;
     const wallL = '#d64532';
@@ -480,6 +522,147 @@ export function building(kind: 'house' | 'hotel', variant = 0): BuildingSprite {
     );
     spr = rasterIso(a, b, h + 10, faces);
   }
+  bCache.set(key, spr);
+  return spr;
+}
+
+// ---------------------------------------------------------------- landmark 3D (voxel)
+// Ikon landmark 16x16 tiap kota diekstrusi jadi model voxel 3D di atas alas batu berlis emas.
+// Model yang sama dipakai untuk sprite isometrik di petak dan animasi berputar di tengah papan.
+
+export interface Voxel {
+  x: number;
+  y: number;
+  z: number;
+  col: string;
+}
+
+const modelCache = new Map<string, Voxel[]>();
+
+/** Model voxel landmark dari ikon kota (x = kolom, y = kedalaman, z = tinggi). */
+export function landmarkModel(name: string): Voxel[] {
+  const hit = modelCache.get(name);
+  if (hit) return hit;
+  const rows = ICONS[name] ?? ICONS.tugu;
+  const D = 4; // ketebalan ekstrusi
+  const PED = 2; // tinggi alas
+  const vox: Voxel[] = [];
+  // alas: batu 2 lapis, lapis atas berlis emas
+  for (let x = -1; x <= 16; x++)
+    for (let y = -2; y < D + 2; y++)
+      for (let z = 0; z < PED; z++) {
+        const edge = x === -1 || x === 16 || y === -2 || y === D + 1;
+        vox.push({ x, y, z, col: z === PED - 1 && edge ? PAL.g : z === 0 ? PAL.S : PAL.s });
+      }
+  rows.forEach((row, r) => {
+    const z = PED + (rows.length - 1 - r);
+    for (let x = 0; x < Math.min(16, row.length); x++) {
+      const col = PAL[row[x]];
+      if (!col) continue;
+      for (let y = 0; y < D; y++) vox.push({ x, y, z, col });
+    }
+  });
+  modelCache.set(name, vox);
+  return vox;
+}
+
+const shadeCache = new Map<string, string>();
+function shade(col: string, amt: number): string {
+  const k = col + amt;
+  let v = shadeCache.get(k);
+  if (!v) shadeCache.set(k, (v = shiftColor(col, amt)));
+  return v;
+}
+
+/**
+ * Gambar model voxel diputar `theta` (radian, sumbu vertikal) dengan proyeksi miring 2:1.
+ * (cx, cy) = titik tengah alas di kanvas, `sc` = ukuran satu voxel dalam pixel.
+ */
+export function drawVoxels(ctx: CanvasRenderingContext2D, vox: Voxel[], cx: number, cy: number, sc: number, theta: number) {
+  const occ = new Set(vox.map((v) => `${v.x},${v.y},${v.z}`));
+  const has = (x: number, y: number, z: number) => occ.has(`${x},${y},${z}`);
+  // pusat rotasi = tengah alas
+  let mx = 0, my = 0;
+  for (const v of vox) {
+    mx += v.x;
+    my += v.y;
+  }
+  mx = mx / vox.length + 0.5;
+  my = my / vox.length + 0.5;
+  const c = Math.cos(theta), s = Math.sin(theta);
+  const P = (x: number, y: number, z: number): [number, number] => {
+    const X = (x - mx) * c - (y - my) * s;
+    const Y = (x - mx) * s + (y - my) * c;
+    return [cx + X * sc, cy + Y * sc * 0.5 - z * sc];
+  };
+  const depth = (v: Voxel) => (v.x + 0.5 - mx) * s + (v.y + 0.5 - my) * c;
+  const sorted = [...vox].sort((a, b) => depth(a) - depth(b) || a.z - b.z);
+  // normal sisi samping: [dx, dy] -> komponen menghadap kamera = dx*s + dy*c
+  const sides: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const quad = (pts: [number, number][], col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+    ctx.closePath();
+    ctx.fill();
+  };
+  for (const v of sorted) {
+    const { x, y, z } = v;
+    for (const [dx, dy] of sides) {
+      const facing = dx * s + dy * c;
+      if (facing <= 0.001 || has(x + dx, y + dy, z)) continue;
+      // cahaya dari kiri-depan
+      const light = -(dx * c - dy * s);
+      const amt = Math.round(-28 + light * 22 - (1 - facing) * 10);
+      const x0 = dx === 1 ? x + 1 : x, y0 = dy === 1 ? y + 1 : y;
+      const x1 = dx === 0 ? x + 1 : x0, y1 = dy === 0 ? y + 1 : y0;
+      quad([P(x0, y0, z), P(x1, y1, z), P(x1, y1, z + 1), P(x0, y0, z + 1)], shade(v.col, amt));
+    }
+    if (!has(x, y, z + 1)) quad([P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], shade(v.col, 18));
+  }
+}
+
+/** Ubah gambar anti-alias jadi pixel tegas + garis tepi gelap. */
+export function crispen(c: HTMLCanvasElement) {
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  const W = c.width, H = c.height;
+  const solid = new Uint8Array(W * H);
+  for (let k = 0; k < W * H; k++) {
+    if (d[k * 4 + 3] >= 110) {
+      solid[k] = 1;
+      d[k * 4 + 3] = 255;
+    } else d[k * 4 + 3] = 0;
+  }
+  const [or, og, ob] = [0x2a, 0x1a, 0x12];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const k = y * W + x;
+      if (solid[k]) continue;
+      if ((x > 0 && solid[k - 1]) || (x < W - 1 && solid[k + 1]) || (y > 0 && solid[k - W]) || (y < H - 1 && solid[k + W])) {
+        d[k * 4] = or;
+        d[k * 4 + 1] = og;
+        d[k * 4 + 2] = ob;
+        d[k * 4 + 3] = 255;
+      }
+    }
+  ctx.putImageData(img, 0, 0);
+}
+
+/** Sprite isometrik landmark untuk ditaruh di petak (sudut pandang sama dengan rumah/hotel). */
+export function landmarkSprite(name: string): BuildingSprite {
+  const key = 'landmark:' + name;
+  const hit = bCache.get(key);
+  if (hit) return hit;
+  const sc = 2.1;
+  const W = 54, H = 68;
+  const [c, ctx] = canvas(W, H);
+  const ax = W / 2, ay = H - 12;
+  drawVoxels(ctx, landmarkModel(name), ax, ay, sc, Math.PI / 4);
+  crispen(c);
+  const spr = { c, ax, ay: ay + 9 };
   bCache.set(key, spr);
   return spr;
 }

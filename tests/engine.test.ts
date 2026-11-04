@@ -139,16 +139,18 @@ describe('giliran dasar', () => {
 });
 
 describe('sewa', () => {
-  it('sewa dasar, grup lengkap 2x, rumah & hotel', () => {
+  it('sewa dasar, grup lengkap 2x, rumah/hotel/mall/landmark', () => {
     const g = setup();
     g.s.props[1].owner = 'B';
     expect(engine.rentFor(g.s, 1, 7)).toBe(20);
     g.s.props[3].owner = 'B';
     expect(engine.rentFor(g.s, 1, 7)).toBe(40);
-    g.s.props[1].houses = 3;
-    expect(engine.rentFor(g.s, 1, 7)).toBe(900);
-    g.s.props[1].houses = 5;
-    expect(engine.rentFor(g.s, 1, 7)).toBe(2500);
+    const r = theme.tiles[1].rent!;
+    for (let lvl = 1; lvl <= 4; lvl++) {
+      g.s.props[1].houses = lvl;
+      expect(engine.rentFor(g.s, 1, 7)).toBe(r[lvl]);
+    }
+    expect(r).toEqual([20, 100, 300, 1600, 3750]);
     g.s.props[1].mortgaged = true;
     expect(engine.rentFor(g.s, 1, 7)).toBe(0);
   });
@@ -204,7 +206,8 @@ describe('ambil alih', () => {
     g.rng.dice(1, 2);
     g.act('A', { type: 'roll' });
     const t = theme.tiles[3];
-    expect(engine.takeoverPrice(g.s, 3)).toBe((t.price! + t.houseCost! * 2) * 2);
+    // Rumah (1x) + Hotel (2x biaya dasar)
+    expect(engine.takeoverPrice(g.s, 3)).toBe((t.price! + t.houseCost! * 3) * 2);
     g.act('A', { type: 'takeover' });
     expect(g.s.props[3]).toMatchObject({ owner: 'A', houses: 2 });
   });
@@ -288,48 +291,118 @@ describe('lelang', () => {
 });
 
 describe('bangunan', () => {
-  function monopoly() {
+  /** A berdiri di kotanya sendiri (Kupang, petak 1) setelah melempar dadu. */
+  function standOn(tile = 1) {
     const g = setup();
-    g.s.props[1].owner = 'A';
-    g.s.props[3].owner = 'A';
+    g.s.props[tile].owner = 'A';
+    // taruh pion langsung di kota itu lalu tandai sudah melempar dadu
+    P(g.s, 'A').position = tile;
+    g.s.dice = [1, 2];
+    g.s.stage = 'end';
+    g.s.upgradeUsed = false;
     return g;
   }
 
-  it('wajib punya grup lengkap dan bangun merata', () => {
+  it('hanya bisa upgrade saat berhenti di kota sendiri, satu level per singgah', () => {
+    const g = standOn(1);
+    // tidak perlu grup lengkap
+    g.act('A', { type: 'build', tile: 1 });
+    expect(g.s.props[1].houses).toBe(1);
+    expect(P(g.s, 'A').money).toBe(15000 - 500);
+    expect(g.tryAct('A', { type: 'build', tile: 1 })).toEqual({ ok: false, error: 'Sudah upgrade di persinggahan ini' });
+    // kota lain milik A tapi A tidak berdiri di sana
+    g.s.props[3].owner = 'A';
+    expect(g.tryAct('A', { type: 'build', tile: 3 })).toEqual({ ok: false, error: 'Upgrade hanya saat kamu berhenti di kota ini' });
+  });
+
+  it('tidak bisa upgrade sebelum melempar dadu atau di giliran lawan', () => {
     const g = setup();
     g.s.props[1].owner = 'A';
-    expect(g.tryAct('A', { type: 'build', tile: 1 }).ok).toBe(false);
-    const m = monopoly();
-    m.act('A', { type: 'build', tile: 1 });
-    expect(m.tryAct('A', { type: 'build', tile: 1 })).toEqual({ ok: false, error: 'Bangun merata dulu di grup ini' });
-    m.act('A', { type: 'build', tile: 3 });
-    m.act('A', { type: 'build', tile: 1 });
-    expect(m.s.props[1].houses).toBe(2);
-    expect(m.s.bankHouses).toBe(29);
-    expect(P(m.s, 'A').money).toBe(15000 - 1500);
+    P(g.s, 'A').position = 1;
+    expect(g.tryAct('A', { type: 'build', tile: 1 })).toEqual({ ok: false, error: 'Upgrade setelah pionmu berhenti di kota ini' });
+    g.s.props[1].owner = 'B';
+    P(g.s, 'B').position = 1;
+    expect(g.tryAct('B', { type: 'build', tile: 1 })).toEqual({ ok: false, error: 'Upgrade hanya di giliranmu' });
   });
 
-  it('hotel mengembalikan 4 rumah ke bank, jual 50%', () => {
-    const g = monopoly();
-    for (let k = 0; k < 4; k++) {
-      g.act('A', { type: 'build', tile: 1 });
-      g.act('A', { type: 'build', tile: 3 });
+  it('berhenti di kota sendiri lewat lemparan dadu membuka upgrade', () => {
+    const g = setup();
+    g.s.props[3].owner = 'A';
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    expect(engine.canBuild(g.s, 'A', 3)).toBeNull();
+    g.act('A', { type: 'build', tile: 3 });
+    expect(g.s.props[3].houses).toBe(1);
+  });
+
+  it('urutan Rumah -> Hotel -> Mall -> Landmark dengan biaya 1x/2x/3x/4x', () => {
+    const g = standOn(39); // Jakarta, biaya dasar 2.000
+    const costs: number[] = [];
+    for (let lvl = 1; lvl <= 4; lvl++) {
+      const before = P(g.s, 'A').money;
+      P(g.s, 'A').money = 50000;
+      g.s.upgradeUsed = false;
+      g.act('A', { type: 'build', tile: 39 });
+      costs.push(50000 - P(g.s, 'A').money);
+      P(g.s, 'A').money = before;
+      expect(g.s.props[39].houses).toBe(lvl);
     }
-    expect(g.s.bankHouses).toBe(24);
-    g.act('A', { type: 'build', tile: 1 });
-    expect(g.s.props[1].houses).toBe(5);
-    expect(g.s.bankHouses).toBe(28);
-    expect(g.s.bankHotels).toBe(11);
-    const before = P(g.s, 'A').money;
-    g.act('A', { type: 'sell', tile: 1 });
-    expect(g.s.props[1].houses).toBe(4);
-    expect(P(g.s, 'A').money).toBe(before + 250);
+    expect(costs).toEqual([2000, 4000, 6000, 8000]);
+    g.s.upgradeUsed = false;
+    expect(g.tryAct('A', { type: 'build', tile: 39 })).toEqual({ ok: false, error: 'Sudah Landmark (level tertinggi)' });
+    expect(engine.rentFor(g.s, 39, 7)).toBe(30000);
   });
 
-  it('stok rumah bank terbatas', () => {
-    const g = monopoly();
-    g.s.bankHouses = 0;
-    expect(g.tryAct('A', { type: 'build', tile: 1 })).toEqual({ ok: false, error: 'Stok rumah bank habis' });
+  it('jual turun satu level dengan nilai 50% biaya level itu', () => {
+    const g = setup();
+    g.s.props[39] = { owner: 'A', houses: 4, mortgaged: false };
+    g.act('A', { type: 'sell', tile: 39 });
+    expect(g.s.props[39].houses).toBe(3);
+    expect(P(g.s, 'A').money).toBe(15000 + 4000);
+    g.act('A', { type: 'sell', tile: 39 });
+    expect(P(g.s, 'A').money).toBe(15000 + 4000 + 3000);
+  });
+});
+
+describe('landmark', () => {
+  it('kota ber-landmark tidak bisa diambil alih', () => {
+    const g = setup();
+    g.s.props[3] = { owner: 'B', houses: 4, mortgaged: false };
+    g.rng.dice(1, 2);
+    g.act('A', { type: 'roll' });
+    // bayar sewa landmark lalu langsung selesai, tanpa tawaran ambil alih
+    expect(P(g.s, 'A').money).toBe(15000 - theme.tiles[3].rent![4]);
+    expect(g.s.stage).toBe('end');
+    expect(engine.canTakeover(g.s, 'A', 3)).toBe('Landmark tidak bisa diambil alih');
+  });
+
+  it('pemilik tetap bisa melikuidasi landmark saat berutang', () => {
+    const g = setup();
+    const a = P(g.s, 'A');
+    g.s.props[39] = { owner: 'A', houses: 4, mortgaged: false };
+    g.s.props[1] = { owner: 'B', houses: 4, mortgaged: false };
+    a.money = 100;
+    // A berutang sewa Kupang ber-landmark milik B: 3.750
+    g.s.debts.push({ debtor: 'A', creditor: 'B', amount: 3750, reason: 'rent|Sewa Kupang' });
+    g.s.stage = 'debt';
+    expect(engine.liquidationValue(g.s, 'A')).toBeGreaterThan(3750);
+    g.act('A', { type: 'sell', tile: 39 });
+    expect(g.s.props[39].houses).toBe(3);
+    g.act('A', { type: 'payDebt' });
+    expect(a.money).toBe(100 + 4000 - 3750);
+  });
+
+  it('likuidasi otomatis juga menjual landmark', () => {
+    const g = setup();
+    const a = P(g.s, 'A');
+    g.s.props[39] = { owner: 'A', houses: 4, mortgaged: false };
+    a.money = 0;
+    g.s.debts.push({ debtor: 'A', creditor: 'bank', amount: 3000, reason: 'Pajak' });
+    g.s.stage = 'debt';
+    engine.autoAct(g.s, g.ctx());
+    expect(a.bankrupt).toBe(false);
+    expect(g.s.props[39].houses).toBe(3);
+    expect(a.money).toBe(1000);
   });
 });
 
@@ -341,8 +414,7 @@ describe('hipotek', () => {
     expect(P(g.s, 'A').money).toBe(17000);
     g.act('A', { type: 'unmortgage', tile: 39 });
     expect(P(g.s, 'A').money).toBe(17000 - 2200);
-    g.s.props[37].owner = 'A';
-    g.s.props[37].houses = 1;
+    g.s.props[39].houses = 1;
     expect(g.tryAct('A', { type: 'mortgage', tile: 39 }).ok).toBe(false);
   });
 });
@@ -448,10 +520,11 @@ describe('kartu', () => {
     expect(P(g.s, 'C').money).toBe(15500);
   });
 
-  it('perbaikan per rumah dan hotel', () => {
+  it('perbaikan per rumah dan hotel/mall/landmark', () => {
     const g = setup();
-    g.s.props[1] = { owner: 'A', houses: 2, mortgaged: false };
-    g.s.props[3] = { owner: 'A', houses: 5, mortgaged: false };
+    g.s.props[1] = { owner: 'A', houses: 1, mortgaged: false };
+    g.s.props[6] = { owner: 'A', houses: 1, mortgaged: false };
+    g.s.props[3] = { owner: 'A', houses: 4, mortgaged: false };
     g.s.decks.chance = ['K11', ...g.s.decks.chance.filter((x) => x !== 'K11')];
     g.rng.dice(3, 4);
     g.act('A', { type: 'roll' });
@@ -564,10 +637,10 @@ describe('tukar-menukar', () => {
     expect(P(g.s, 'B').money).toBe(15100);
   });
 
-  it('tidak boleh menukar properti di grup yang ada bangunannya', () => {
+  it('tidak boleh menukar properti yang ada bangunannya', () => {
     const g = setup();
-    g.s.props[1] = { owner: 'A', houses: 1, mortgaged: false };
-    g.s.props[3] = { owner: 'A', houses: 0, mortgaged: false };
+    g.s.props[1] = { owner: 'A', houses: 0, mortgaged: false };
+    g.s.props[3] = { owner: 'A', houses: 1, mortgaged: false };
     const r = g.tryAct('A', { type: 'proposeTrade', to: 'B', give: { money: 0, tiles: [3], jailCards: 0 }, get: { money: 100, tiles: [], jailCards: 0 } });
     expect(r.ok).toBe(false);
   });
@@ -610,18 +683,18 @@ describe('otomatis', () => {
           if (!g.tryAct(cur.id, { type: step % 3 ? 'buy' : 'decline' }).ok) g.act(cur.id, { type: 'decline' });
           continue;
         }
-        if (g.s.stage === 'end') {
+        if (g.s.stage === 'end' || g.s.stage === 'roll') {
+          const before = { ...g.s.props };
           for (const i of engine.ownedTiles(g.s, cur.id)) g.tryAct(cur.id, { type: 'build', tile: i });
+          // upgrade hanya bisa di petak tempat pion berhenti, maks. satu level
+          for (const i of Object.keys(before).map(Number))
+            if (i !== cur.position) expect(g.s.props[i].houses).toBe(before[i].houses);
         }
+        if (g.s.stage === 'takeover' && step % 2) g.tryAct(cur.id, { type: 'takeover' });
         engine.autoAct(g.s, g.ctx());
         for (const p of g.s.players) expect(p.money).toBeGreaterThanOrEqual(0);
-        expect(g.s.bankHouses).toBeGreaterThanOrEqual(0);
-        expect(g.s.bankHotels).toBeGreaterThanOrEqual(0);
+        for (const o of Object.values(g.s.props)) expect(o.houses).toBeLessThanOrEqual(4);
       }
-      const totalHouses = Object.values(g.s.props).reduce((a, o) => a + (o.houses < 5 ? o.houses : 0), 0);
-      const totalHotels = Object.values(g.s.props).filter((o) => o.houses === 5).length;
-      expect(totalHouses + g.s.bankHouses).toBe(32);
-      expect(totalHotels + g.s.bankHotels).toBe(12);
       expect(g.s.decks.chance.length + g.s.players.reduce((a, p) => a + p.jailFreeCards.filter((c) => c.deck === 'chance').length, 0)).toBe(16);
     }
   }, 60_000);
