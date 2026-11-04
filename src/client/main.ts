@@ -32,6 +32,8 @@ const app = {
   screen: '' as '' | 'home' | 'lobby' | 'game',
   bidDraft: '',
   shownGameOver: false,
+  /** Persinggahan terakhir yang sudah ditawari pop-up upgrade (turnNo:posisi:dadu). */
+  upgradePrompted: '',
   unreadChat: 0,
   seenTrades: new Set<number>(),
 };
@@ -655,6 +657,7 @@ function updateGame(events: GameEvent[], _prev: PublicRoom | null) {
   renderActions();
   renderLog();
   notifyTrades();
+  board.after(promptUpgrade);
   if (g.stage === 'gameover' && !app.shownGameOver) {
     app.shownGameOver = true;
     const wait = () => (board?.busy ? setTimeout(wait, 300) : showGameOver());
@@ -853,6 +856,38 @@ function upgradeBox(pid: string): string {
   const label = next === MAX_LEVEL ? `🏛 Bangun Landmark ${t.landmark ?? ''}` : `🏗 Upgrade ke ${LEVEL_NAMES[next]}`;
   return `<p class="small">Kamu berhenti di kotamu sendiri. Sewa ${LEVEL_NAMES[next]}: <b>${fmt(t.rent![next])}</b>.</p>
     <div class="btns"><button class="btn big" data-build="${i}" ${err ? `disabled title="${esc(err)}"` : ''}>${esc(label)} ${fmt(engine.levelCost(i, next))}</button></div>`;
+}
+
+/** Pop-up "Bangun Rumah?" begitu pion berhenti di kota milik sendiri (sekali per persinggahan). */
+function promptUpgrade() {
+  const g = app.room?.game;
+  const me = meP();
+  if (!g || !me || me.bankrupt || g.dice === null) return;
+  if (g.players[g.turnIndex].id !== me.id || (g.stage !== 'end' && g.stage !== 'roll')) return;
+  const i = me.position;
+  const t = theme.tiles[i];
+  const o = g.props[i];
+  if (t.type !== 'city' || !o || o.owner !== me.id || o.houses >= MAX_LEVEL) return;
+  const key = `${g.turnNo}:${i}:${g.dice.join('')}`;
+  if (app.upgradePrompted === key) return;
+  const err = engine.canBuild(asState(), me.id, i);
+  if (err && err !== 'Uang tidak cukup') return;
+  if ($('#modal').classList.contains('open')) return;
+  app.upgradePrompted = key;
+  const next = o.houses + 1;
+  const cost = engine.levelCost(i, next);
+  const what = next === MAX_LEVEL ? `Landmark ${t.landmark ?? ''}` : LEVEL_NAMES[next];
+  const m = openModal(`${tileTitle(i)}<p>Kamu berhenti di kotamu sendiri! Bangun <b>${esc(what)}</b> seharga <b>${fmt(cost)}</b>?</p>
+    <p class="small">Sewa naik dari ${fmt(engine.rentFor(asState(), i, 7))} jadi <b>${fmt(t.rent![next])}</b>.${next === MAX_LEVEL ? ' Landmark tidak bisa diambil alih lawan.' : ''}</p>
+    ${err ? `<p class="bad">Uang kurang ${fmt(cost - me.money)}.</p>` : ''}
+    <div class="btns"><button class="btn big primary" data-up="yes" ${err ? 'disabled' : ''}>${next === MAX_LEVEL ? '🏛' : '🏗'} Bangun ${esc(LEVEL_NAMES[next])}</button><button class="btn big" data-up="no">Nanti</button></div>`);
+  m.querySelectorAll<HTMLButtonElement>('[data-up]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        closeModal();
+        if (b.dataset.up === 'yes') void act({ type: 'build', tile: i });
+      }),
+  );
 }
 
 function renderActions() {
